@@ -2,7 +2,13 @@
 
 Real-time CPU monitoring for Linux. Shows temperatures, frequencies, throttling, and fan status.
 
-## Build
+## Install
+
+```
+go install github.com/Mohabdo21/cpumon@latest
+```
+
+Or build from source:
 
 ```
 make build
