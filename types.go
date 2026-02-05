@@ -45,6 +45,13 @@ type CPUFreqInfo struct {
 	CoreID int
 }
 
+type HwmonTemp struct {
+	Input string
+	Label string
+	Crit  string
+	Max   string
+}
+
 type FileReader interface {
 	Read(path string) (string, error)
 }

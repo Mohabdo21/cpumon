@@ -15,8 +15,8 @@ type ThrottleInfo struct {
 	CoreMaxTime      string
 }
 
-func readThrottleInfo(fr FileReader) ThrottleInfo {
-	if !fileExists(cpuThrottlePath) {
+func readThrottleInfo(fr FileReader, available bool) ThrottleInfo {
+	if !available {
 		return ThrottleInfo{Available: false}
 	}
 

@@ -18,10 +18,11 @@ type Monitor struct {
 	deviceModel string
 	cpuFreqs    []CPUFreqInfo
 	hwmonPath   string
-	hwmonTemps  []string
+	hwmonTemps  []HwmonTemp
 	fanFiles    []string
 	thinkpadFan bool
 	sensorsOK   bool
+	throttleOK  bool
 
 	coreFreqBuf map[int]string
 	lineBuf     []string
@@ -45,6 +46,7 @@ func NewMonitor() *Monitor {
 		fanFiles:    discoverFanFiles(),
 		thinkpadFan: fileExists(thinkpadFanPath),
 		sensorsOK:   sensorsErr == nil,
+		throttleOK:  fileExists(cpuThrottlePath),
 		coreFreqBuf: make(map[int]string, 32),
 		lineBuf:     make([]string, 0, 32),
 	}
@@ -63,7 +65,7 @@ func (m *Monitor) collect() Metrics {
 		EnergyBias:  readOrNA(m.fr, cpuEnergyBiasPath),
 		AvgFreq:     avgFreq,
 		CPUStatus:   cpuStatus,
-		Throttle:    readThrottleInfo(m.fr),
+		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
 		SensorsHint: !m.sensorsOK,
 	}

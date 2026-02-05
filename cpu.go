@@ -67,9 +67,7 @@ func readOrNA(fr FileReader, path string) string {
 }
 
 func readFrequencies(fr FileReader, infos []CPUFreqInfo, coreFreqs map[int]string) string {
-	for k := range coreFreqs {
-		delete(coreFreqs, k)
-	}
+	clear(coreFreqs)
 	if len(infos) == 0 {
 		return "N/A"
 	}
@@ -100,15 +98,24 @@ func formatFreq(kHz int64) string {
 	return fmt.Sprintf("%d MHz", kHz/1000)
 }
 
-func discoverHwmonTemps(hwmonPath string) []string {
+func discoverHwmonTemps(hwmonPath string) []HwmonTemp {
 	if hwmonPath == "" {
 		return nil
 	}
-	temps, _ := filepath.Glob(filepath.Join(hwmonPath, "temp*_input"))
+	matches, _ := filepath.Glob(filepath.Join(hwmonPath, "temp*_input"))
+	temps := make([]HwmonTemp, 0, len(matches))
+	for _, input := range matches {
+		temps = append(temps, HwmonTemp{
+			Input: input,
+			Label: strings.Replace(input, "_input", "_label", 1),
+			Crit:  strings.Replace(input, "_input", "_crit", 1),
+			Max:   strings.Replace(input, "_input", "_max", 1),
+		})
+	}
 	return temps
 }
 
-func readCPUThermal(fr FileReader, cr CmdRunner, sensorsOK bool, hwmonTemps []string, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
+func readCPUThermal(fr FileReader, cr CmdRunner, sensorsOK bool, hwmonTemps []HwmonTemp, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
 	if sensorsOK {
 		if out, err := readThermalFromSensors(cr, coreFreqs, lineBuf); err == nil {
 			return out, nil
@@ -154,29 +161,28 @@ func readThermalFromSensors(cr CmdRunner, coreFreqs map[int]string, lineBuf *[]s
 	return strings.Join(lines, "\n"), nil
 }
 
-func readThermalFromHwmon(fr FileReader, temps []string, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
+func readThermalFromHwmon(fr FileReader, temps []HwmonTemp, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
 	if len(temps) == 0 {
 		return "", ErrNoThermalData
 	}
 
 	lines := (*lineBuf)[:0]
-	for _, temp := range temps {
-		milli, ok := readInt(fr, temp)
+	for _, t := range temps {
+		milli, ok := readInt(fr, t.Input)
 		if !ok {
 			continue
 		}
 		tempC := float64(milli) / 1000.0
 
-		labelPath := strings.Replace(temp, "_input", "_label", 1)
 		label := "CPU"
-		if l, err := fr.Read(labelPath); err == nil {
+		if l, err := fr.Read(t.Label); err == nil {
 			label = l
 		}
 
 		info := fmt.Sprintf("+%.1f°C", tempC)
-		if m, ok := readInt(fr, strings.Replace(temp, "_input", "_crit", 1)); ok && m > 0 {
+		if m, ok := readInt(fr, t.Crit); ok && m > 0 {
 			info += fmt.Sprintf("  (crit = +%.1f°C)", float64(m)/1000.0)
-		} else if m, ok := readInt(fr, strings.Replace(temp, "_input", "_max", 1)); ok && m > 0 {
+		} else if m, ok := readInt(fr, t.Max); ok && m > 0 {
 			info += fmt.Sprintf("  (high = +%.1f°C)", float64(m)/1000.0)
 		}
 
