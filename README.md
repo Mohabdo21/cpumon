@@ -34,7 +34,7 @@ sudo make install
 Requires root for some metrics. Install `lm-sensors` for better thermal data:
 
 ```
-sudo apt install lm-sensors
+sudo dnf install lm_sensors
 sudo sensors-detect
 ```
 
@@ -48,4 +48,4 @@ sudo sensors-detect
 
 ## License
 
-MIT
+[MIT](LICENSE)
