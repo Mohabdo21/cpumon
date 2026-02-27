@@ -12,6 +12,7 @@ type Metrics struct {
 	Governor    string
 	EnergyBias  string
 	AvgFreq     string
+	CPUUsage    float64
 	CPUStatus   string
 	Throttle    ThrottleInfo
 	FanStatus   string
@@ -38,6 +39,9 @@ func display(m Metrics, interval time.Duration) {
 		}
 		if m.AvgFreq != "N/A" {
 			fmt.Fprintf(&b, "Current Freq (AVG): %s\n", m.AvgFreq)
+		}
+		if m.CPUUsage >= 0 {
+			fmt.Fprintf(&b, "CPU Usage: %s\n", usageBar(m.CPUUsage, 20))
 		}
 		b.WriteByte('\n')
 	}
@@ -71,4 +75,12 @@ func display(m Metrics, interval time.Duration) {
 	fmt.Fprintf(&b, "Refreshing every %v... (Press Ctrl+C to exit)\n", interval)
 
 	fmt.Print(b.String())
+}
+
+func usageBar(pct float64, width int) string {
+	n := max(min(int(pct/100*float64(width)+0.5), width), 0)
+	return fmt.Sprintf("[%s%s] %4.1f%%",
+		strings.Repeat("█", n),
+		strings.Repeat("░", width-n),
+		pct)
 }

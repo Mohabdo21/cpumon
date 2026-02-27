@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const version = "0.1.6"
+const version = "0.1.7"
 
 func main() {
 	interval := flag.Duration("i", time.Second, "")

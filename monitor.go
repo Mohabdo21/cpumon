@@ -23,6 +23,7 @@ type Monitor struct {
 	thinkpadFan bool
 	sensorsOK   bool
 	throttleOK  bool
+	prevStat    CPUTimes
 
 	coreFreqBuf map[int]string
 	lineBuf     []string
@@ -60,6 +61,7 @@ func NewMonitor() (*Monitor, error) {
 		thinkpadFan: thinkpadFan,
 		sensorsOK:   sensorsOK,
 		throttleOK:  throttleOK,
+		prevStat:    readCPUStat(fr),
 		coreFreqBuf: make(map[int]string, 32),
 		lineBuf:     make([]string, 0, 32),
 	}
@@ -78,6 +80,10 @@ func NewMonitor() (*Monitor, error) {
 func (m *Monitor) collect() Metrics {
 	avgFreq := readFrequencies(m.fr, m.cpuFreqs, m.coreFreqBuf)
 
+	cur := readCPUStat(m.fr)
+	usage := calcUsage(m.prevStat, cur)
+	m.prevStat = cur
+
 	cpuStatus, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, &m.lineBuf)
 	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
 
@@ -87,6 +93,7 @@ func (m *Monitor) collect() Metrics {
 		Governor:    readOrNA(m.fr, cpuGovernorPath),
 		EnergyBias:  readOrNA(m.fr, cpuEnergyBiasPath),
 		AvgFreq:     avgFreq,
+		CPUUsage:    usage,
 		CPUStatus:   cpuStatus,
 		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
