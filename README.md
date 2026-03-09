@@ -4,6 +4,12 @@ Real-time CPU monitoring for Linux. Shows temperatures, frequencies, throttling,
 
 ## Install
 
+**AUR (Arch Linux):**
+
+```
+yay -S cpumon
+```
+
 **Pre-built binary:**
 
 ```
