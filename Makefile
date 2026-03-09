@@ -43,7 +43,7 @@ aur-update: aur-clone
 	@sed -i "s/^pkgrel=.*/pkgrel=1/" $(AUR_DIR)/PKGBUILD
 	@cp aur/PKGBUILD $(AUR_DIR)/PKGBUILD
 	@sed -i "s/^pkgver=.*/pkgver=$(VERSION)/" $(AUR_DIR)/PKGBUILD
-	@cd $(AUR_DIR) && SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+") && \
+	@cd $(AUR_DIR) && SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
 		sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" PKGBUILD
 	@cd $(AUR_DIR) && makepkg --printsrcinfo > .SRCINFO
 	@echo "PKGBUILD and .SRCINFO updated for v$(VERSION)"
