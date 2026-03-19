@@ -90,6 +90,8 @@ func (m *Monitor) collect() Metrics {
 	return Metrics{
 		DeviceModel: m.deviceModel,
 		CPUModel:    m.cpuModel,
+		Kernel:      readOrNA(m.fr, kernelReleasePath),
+		Uptime:      readUptime(m.fr),
 		Governor:    readOrNA(m.fr, cpuGovernorPath),
 		EnergyBias:  readOrNA(m.fr, cpuEnergyBiasPath),
 		AvgFreq:     avgFreq,

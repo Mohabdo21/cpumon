@@ -9,6 +9,8 @@ import (
 type Metrics struct {
 	DeviceModel string
 	CPUModel    string
+	Kernel      string
+	Uptime      string
 	Governor    string
 	EnergyBias  string
 	AvgFreq     string
@@ -27,7 +29,9 @@ func display(m Metrics, interval time.Duration) {
 
 	b.WriteString("=== System Information ===\n")
 	fmt.Fprintf(&b, "Device: %s\n", m.DeviceModel)
-	fmt.Fprintf(&b, "CPU: %s\n\n", m.CPUModel)
+	fmt.Fprintf(&b, "CPU: %s\n", m.CPUModel)
+	fmt.Fprintf(&b, "Kernel: %s\n", m.Kernel)
+	fmt.Fprintf(&b, "Uptime: %s\n\n", m.Uptime)
 
 	if m.Governor != "N/A" || m.AvgFreq != "N/A" {
 		b.WriteString("=== CPU Performance ===\n")
