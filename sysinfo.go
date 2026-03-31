@@ -3,8 +3,46 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"strconv"
 	"strings"
 )
+
+func readLoadAvg(fr FileReader) string {
+	data, err := fr.Read(procLoadAvgPath)
+	if err != nil {
+		return "N/A"
+	}
+
+	fields := strings.Fields(data)
+	if len(fields) < 3 {
+		return "N/A"
+	}
+
+	return strings.Join(fields[:3], " ")
+}
+
+func readTurboBoost(fr FileReader) string {
+	if raw, err := fr.Read(intelNoTurboPath); err == nil {
+		switch strings.TrimSpace(raw) {
+		case "0":
+			return "Enabled"
+		case "1":
+			return "Disabled"
+		}
+	}
+
+	if raw, err := fr.Read(cpuBoostPath); err == nil {
+		enabled, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err == nil {
+			if enabled != 0 {
+				return "Enabled"
+			}
+			return "Disabled"
+		}
+	}
+
+	return "N/A"
+}
 
 func readCPUModel(fr FileReader) string {
 	data, err := fr.Read(cpuInfoPath)

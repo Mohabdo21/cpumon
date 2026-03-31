@@ -11,8 +11,10 @@ type Metrics struct {
 	CPUModel    string
 	Kernel      string
 	Uptime      string
+	LoadAvg     string
 	Governor    string
 	EnergyBias  string
+	TurboBoost  string
 	AvgFreq     string
 	CPUUsage    float64
 	CPUStatus   string
@@ -31,15 +33,22 @@ func display(m Metrics, interval time.Duration) {
 	fmt.Fprintf(&b, "Device: %s\n", m.DeviceModel)
 	fmt.Fprintf(&b, "CPU: %s\n", m.CPUModel)
 	fmt.Fprintf(&b, "Kernel: %s\n", m.Kernel)
-	fmt.Fprintf(&b, "Uptime: %s\n\n", m.Uptime)
+	fmt.Fprintf(&b, "Uptime: %s\n", m.Uptime)
+	if m.LoadAvg != "N/A" {
+		fmt.Fprintf(&b, "Load Avg (1m/5m/15m): %s\n", m.LoadAvg)
+	}
+	b.WriteByte('\n')
 
-	if m.Governor != "N/A" || m.AvgFreq != "N/A" {
+	if m.Governor != "N/A" || m.EnergyBias != "N/A" || m.TurboBoost != "N/A" || m.AvgFreq != "N/A" {
 		b.WriteString("=== CPU Performance ===\n")
 		if m.Governor != "N/A" {
 			fmt.Fprintf(&b, "Governor: %s\n", m.Governor)
 		}
 		if m.EnergyBias != "N/A" {
 			fmt.Fprintf(&b, "Energy Bias: %s\n", m.EnergyBias)
+		}
+		if m.TurboBoost != "N/A" {
+			fmt.Fprintf(&b, "Turbo Boost: %s\n", m.TurboBoost)
 		}
 		if m.AvgFreq != "N/A" {
 			fmt.Fprintf(&b, "Current Freq (AVG): %s\n", m.AvgFreq)
