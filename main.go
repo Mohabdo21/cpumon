@@ -8,14 +8,14 @@ import (
 	"time"
 )
 
-const version = "0.1.10"
+const version = "0.1.11"
 
 func main() {
 	interval := flag.Duration("i", time.Second, "")
 	showHelp := flag.Bool("h", false, "")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "cpumon v%s — real-time CPU monitor\n\n", version)
+		fmt.Fprintf(os.Stderr, "cpumon v%s - real-time CPU monitor\n\n", version)
 		fmt.Fprintln(os.Stderr, "Usage: cpumon [-i interval] [-h]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Options:")

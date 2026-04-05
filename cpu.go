@@ -117,58 +117,98 @@ func discoverHwmonTemps(hwmonPath string) []HwmonTemp {
 	return temps
 }
 
-func readCPUThermal(fr FileReader, cr CmdRunner, sensorsOK bool, hwmonTemps []HwmonTemp, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
+func readCPUThermal(fr FileReader, cr CmdRunner, sensorsOK bool, hwmonTemps []HwmonTemp, coreFreqs map[int]string, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
 	if sensorsOK {
-		if out, err := readThermalFromSensors(cr, coreFreqs, lineBuf); err == nil {
+		if out, err := readThermalFromSensors(cr, coreFreqs, coreBuf); err == nil {
 			return out, nil
 		}
 	}
 	if len(hwmonTemps) > 0 {
-		if out, err := readThermalFromHwmon(fr, hwmonTemps, coreFreqs, lineBuf); err == nil {
+		if out, err := readThermalFromHwmon(fr, hwmonTemps, coreFreqs, coreBuf); err == nil {
 			return out, nil
 		}
 	}
-	return "", ErrNoThermalData
+	return nil, ErrNoThermalData
 }
 
-func readThermalFromSensors(cr CmdRunner, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
+func splitTempLimit(s string) (string, string) {
+	if i := strings.IndexByte(s, '('); i > 0 {
+		return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i:])
+	}
+	return strings.TrimSpace(s), ""
+}
+
+func parseTempC(s string) float64 {
+	idx := strings.Index(s, "°")
+	if idx <= 0 {
+		return -1
+	}
+	v, err := strconv.ParseFloat(strings.TrimPrefix(s[:idx], "+"), 64)
+	if err != nil {
+		return -1
+	}
+	return v
+}
+
+func readThermalFromSensors(cr CmdRunner, coreFreqs map[int]string, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
 	out, err := cr.Run("sensors")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	lines := (*lineBuf)[:0]
+	cores := (*coreBuf)[:0]
 	scanner := bufio.NewScanner(strings.NewReader(out))
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		if m := packageRe.FindStringSubmatch(line); m != nil {
-			lines = append(lines, fmt.Sprintf("%s:%s%-10s %s", m[1], m[2], "", m[3]))
+			temp, limit := splitTempLimit(m[3])
+			cores = append(cores, CoreStatus{
+				Label:     m[1],
+				Temp:      temp,
+				Limit:     limit,
+				TempC:     parseTempC(m[3]),
+				IsPackage: true,
+			})
 		} else if m := amdTctlRe.FindStringSubmatch(line); m != nil {
-			lines = append(lines, fmt.Sprintf("%-14s%s%-10s %s", m[1]+":", m[2], "", m[3]))
+			temp, limit := splitTempLimit(m[3])
+			cores = append(cores, CoreStatus{
+				Label:     m[1],
+				Temp:      temp,
+				Limit:     limit,
+				TempC:     parseTempC(m[3]),
+				IsPackage: true,
+			})
 		} else if m := coreRe.FindStringSubmatch(line); m != nil {
 			coreNum, _ := strconv.Atoi(m[2])
-			freq := "N/A"
+			freq := ""
 			if f, ok := coreFreqs[coreNum]; ok {
 				freq = f
 			}
-			lines = append(lines, fmt.Sprintf("%s:%s%-10s %s", m[1], m[3], freq, m[4]))
+			temp, limit := splitTempLimit(m[4])
+			cores = append(cores, CoreStatus{
+				Label: m[1],
+				Freq:  freq,
+				Temp:  temp,
+				Limit: limit,
+				TempC: parseTempC(m[4]),
+			})
 		}
 	}
-	*lineBuf = lines
+	*coreBuf = cores
 
-	if len(lines) == 0 {
-		return "", ErrNoThermalData
+	if len(cores) == 0 {
+		return nil, ErrNoThermalData
 	}
-	return strings.Join(lines, "\n"), nil
+	return cores, nil
 }
 
-func readThermalFromHwmon(fr FileReader, temps []HwmonTemp, coreFreqs map[int]string, lineBuf *[]string) (string, error) {
+func readThermalFromHwmon(fr FileReader, temps []HwmonTemp, coreFreqs map[int]string, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
 	if len(temps) == 0 {
-		return "", ErrNoThermalData
+		return nil, ErrNoThermalData
 	}
 
-	lines := (*lineBuf)[:0]
+	cores := (*coreBuf)[:0]
 	for _, t := range temps {
 		milli, ok := readInt(fr, t.Input)
 		if !ok {
@@ -181,28 +221,37 @@ func readThermalFromHwmon(fr FileReader, temps []HwmonTemp, coreFreqs map[int]st
 			label = l
 		}
 
-		info := fmt.Sprintf("+%.1f°C", tempC)
+		temp := fmt.Sprintf("+%.1f°C", tempC)
+		limit := ""
 		if m, ok := readInt(fr, t.Crit); ok && m > 0 {
-			info += fmt.Sprintf("  (crit = +%.1f°C)", float64(m)/1000.0)
+			limit = fmt.Sprintf("(crit = +%.1f°C)", float64(m)/1000.0)
 		} else if m, ok := readInt(fr, t.Max); ok && m > 0 {
-			info += fmt.Sprintf("  (high = +%.1f°C)", float64(m)/1000.0)
+			limit = fmt.Sprintf("(high = +%.1f°C)", float64(m)/1000.0)
 		}
 
+		isPackage := true
+		freq := ""
 		if m := coreNumRe.FindStringSubmatch(label); m != nil {
+			isPackage = false
 			coreNum, _ := strconv.Atoi(m[1])
-			freq := "N/A"
 			if f, ok := coreFreqs[coreNum]; ok {
 				freq = f
 			}
-			lines = append(lines, fmt.Sprintf("%-14s %-10s %s", label+":", freq, info))
-		} else {
-			lines = append(lines, fmt.Sprintf("%-14s %-10s %s", label+":", "", info))
 		}
-	}
-	*lineBuf = lines
 
-	if len(lines) == 0 {
-		return "", ErrNoThermalData
+		cores = append(cores, CoreStatus{
+			Label:     label,
+			Freq:      freq,
+			Temp:      temp,
+			Limit:     limit,
+			TempC:     tempC,
+			IsPackage: isPackage,
+		})
 	}
-	return strings.Join(lines, "\n"), nil
+	*coreBuf = cores
+
+	if len(cores) == 0 {
+		return nil, ErrNoThermalData
+	}
+	return cores, nil
 }

@@ -57,7 +57,7 @@ type Metrics struct {
 	TurboBoost  string
 	AvgFreq     string
 	CPUUsage    float64
-	CPUStatus   string
+	Cores       []CoreStatus
 	Throttle    ThrottleInfo
 	FanStatus   string
 	SensorsHint bool
@@ -73,6 +73,15 @@ type HwmonTemp struct {
 	Label string
 	Crit  string
 	Max   string
+}
+
+type CoreStatus struct {
+	Label     string
+	Freq      string
+	Temp      string
+	Limit     string
+	TempC     float64
+	IsPackage bool
 }
 
 type FileReader interface {

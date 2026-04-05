@@ -2,81 +2,194 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
 
+// ANSI escape codes
+const (
+	ansiReset  = "\033[0m"
+	ansiBold   = "\033[1m"
+	ansiDim    = "\033[2m"
+	ansiRed    = "\033[31m"
+	ansiGreen  = "\033[32m"
+	ansiYellow = "\033[33m"
+	ansiCyan   = "\033[36m"
+	ansiWhite  = "\033[97m"
+)
+
 func display(m Metrics, interval time.Duration) {
 	var b strings.Builder
-	b.Grow(1024)
+	b.Grow(2048)
 
-	b.WriteString("\033[H\033[2J\033[3J")
+	b.WriteString("\033[H\033[2J")
 
-	b.WriteString("=== System Information ===\n")
-	fmt.Fprintf(&b, "Device: %s\n", m.DeviceModel)
-	fmt.Fprintf(&b, "CPU: %s\n", m.CPUModel)
-	fmt.Fprintf(&b, "Kernel: %s\n", m.Kernel)
-	fmt.Fprintf(&b, "Uptime: %s\n", m.Uptime)
+	writeHeader(&b, "System Information")
+	writeField(&b, "Device", m.DeviceModel)
+	writeField(&b, "CPU", m.CPUModel)
+	writeField(&b, "Kernel", m.Kernel)
+	writeField(&b, "Uptime", m.Uptime)
 	if m.LoadAvg != "N/A" {
-		fmt.Fprintf(&b, "Load Avg (1m/5m/15m): %s\n", m.LoadAvg)
+		writeField(&b, "Load Avg", m.LoadAvg)
 	}
 	b.WriteByte('\n')
 
 	if m.Governor != "N/A" || m.EnergyBias != "N/A" || m.TurboBoost != "N/A" || m.AvgFreq != "N/A" {
-		b.WriteString("=== CPU Performance ===\n")
+		writeHeader(&b, "CPU Performance")
 		if m.Governor != "N/A" {
-			fmt.Fprintf(&b, "Governor: %s\n", m.Governor)
+			writeField(&b, "Governor", m.Governor)
 		}
 		if m.EnergyBias != "N/A" {
-			fmt.Fprintf(&b, "Energy Bias: %s\n", m.EnergyBias)
+			writeField(&b, "Energy Bias", m.EnergyBias)
 		}
 		if m.TurboBoost != "N/A" {
-			fmt.Fprintf(&b, "Turbo Boost: %s\n", m.TurboBoost)
+			writeField(&b, "Turbo Boost", m.TurboBoost)
 		}
 		if m.AvgFreq != "N/A" {
-			fmt.Fprintf(&b, "Current Freq (AVG): %s\n", m.AvgFreq)
+			writeField(&b, "Avg Freq", m.AvgFreq)
 		}
 		if m.CPUUsage >= 0 {
-			fmt.Fprintf(&b, "CPU Usage: %s\n", usageBar(m.CPUUsage, 20))
+			writeUsageBar(&b, m.CPUUsage, 30)
 		}
 		b.WriteByte('\n')
 	}
 
-	if m.CPUStatus != "" {
-		b.WriteString("=== CPU Status ===\n")
-		b.WriteString(m.CPUStatus)
-		b.WriteString("\n\n")
+	if len(m.Cores) > 0 {
+		writeHeader(&b, "CPU Status")
+		writeCoreGrid(&b, m.Cores)
+		b.WriteByte('\n')
 	}
 
 	if m.Throttle.Available {
-		b.WriteString("=== Thermal Throttling Details ===\n")
-		fmt.Fprintf(&b, "Package Throttle Events: %s\n", m.Throttle.PackageCount)
-		fmt.Fprintf(&b, "Package Total Throttle Time: %s\n", m.Throttle.PackageTotalTime)
-		fmt.Fprintf(&b, "Package Max Throttle Event: %s\n", m.Throttle.PackageMaxTime)
-		fmt.Fprintf(&b, "Core Throttle Events: %s\n", m.Throttle.CoreCount)
-		fmt.Fprintf(&b, "Core Total Throttle Time: %s\n", m.Throttle.CoreTotalTime)
-		fmt.Fprintf(&b, "Core Max Throttle Event: %s\n\n", m.Throttle.CoreMaxTime)
+		writeHeader(&b, "Thermal Throttling")
+		writeThrottleField(&b, "Pkg Events", m.Throttle.PackageCount)
+		writeThrottleField(&b, "Pkg Total Time", m.Throttle.PackageTotalTime)
+		writeThrottleField(&b, "Pkg Max Event", m.Throttle.PackageMaxTime)
+		writeThrottleField(&b, "Core Events", m.Throttle.CoreCount)
+		writeThrottleField(&b, "Core Total Time", m.Throttle.CoreTotalTime)
+		writeThrottleField(&b, "Core Max Event", m.Throttle.CoreMaxTime)
+		b.WriteByte('\n')
 	}
 
 	if m.FanStatus != "" {
-		b.WriteString("=== Fan Status ===\n")
-		b.WriteString(m.FanStatus)
-		b.WriteString("\n\n")
+		writeHeader(&b, "Fan Status")
+		for line := range strings.SplitSeq(m.FanStatus, "\n") {
+			if line != "" {
+				fmt.Fprintf(&b, "  %s%s%s\n", ansiWhite, line, ansiReset)
+			}
+		}
+		b.WriteByte('\n')
 	}
 
 	if m.SensorsHint {
-		b.WriteString("Hint: Install lm-sensors for better thermal data: sudo dnf install lm_sensors\n")
+		fmt.Fprintf(&b, "  %s%sHint:%s Install lm-sensors for better thermal data%s\n",
+			ansiDim, ansiYellow, ansiReset+ansiDim, ansiReset)
 	}
 
-	fmt.Fprintf(&b, "Refreshing every %v... (Press Ctrl+C to exit)\n", interval)
+	fmt.Fprintf(&b, "  %sRefreshing every %v... (Ctrl+C to exit)%s\n", ansiDim, interval, ansiReset)
 
 	fmt.Print(b.String())
 }
 
-func usageBar(pct float64, width int) string {
+func writeHeader(b *strings.Builder, title string) {
+	fmt.Fprintf(b, "  %s%s-- %s --%s\n", ansiBold, ansiCyan, title, ansiReset)
+}
+
+func writeField(b *strings.Builder, label, value string) {
+	fmt.Fprintf(b, "  %s%-14s%s %s%s%s\n", ansiDim, label+":", ansiReset, ansiWhite, value, ansiReset)
+}
+
+func writeUsageBar(b *strings.Builder, pct float64, width int) {
 	n := max(min(int(pct/100*float64(width)+0.5), width), 0)
-	return fmt.Sprintf("[%s%s] %4.1f%%",
-		strings.Repeat("█", n),
-		strings.Repeat("░", width-n),
-		pct)
+
+	color := ansiGreen
+	if pct >= 80 {
+		color = ansiRed
+	} else if pct >= 50 {
+		color = ansiYellow
+	}
+
+	fmt.Fprintf(b, "  %s%-14s%s %s[%s%s%s%s]%s %s%4.1f%%%s\n",
+		ansiDim, "CPU Usage:", ansiReset,
+		ansiDim,
+		color+ansiBold, strings.Repeat("█", n),
+		ansiReset+ansiDim, strings.Repeat("░", width-n),
+		ansiReset,
+		color, pct, ansiReset)
+}
+
+func writeCoreGrid(b *strings.Builder, cores []CoreStatus) {
+	// Package / global temps first, on their own lines.
+	for _, c := range cores {
+		if !c.IsPackage {
+			continue
+		}
+		tc := tempColor(c.TempC)
+		if c.Limit != "" {
+			fmt.Fprintf(b, "  %s%-14s%s %s%s%s  %s%s%s\n",
+				ansiDim, c.Label+":", ansiReset,
+				tc, c.Temp, ansiReset,
+				ansiDim, c.Limit, ansiReset)
+		} else {
+			fmt.Fprintf(b, "  %s%-14s%s %s%s%s\n",
+				ansiDim, c.Label+":", ansiReset,
+				tc, c.Temp, ansiReset)
+		}
+	}
+
+	// Collect per-core entries.
+	var perCore []CoreStatus
+	for i := range cores {
+		if !cores[i].IsPackage {
+			perCore = append(perCore, cores[i])
+		}
+	}
+	if len(perCore) == 0 {
+		return
+	}
+
+	// Two-column grid: left half / right half.
+	half := (len(perCore) + 1) / 2
+	for i := range half {
+		writeCoreEntry(b, perCore[i])
+		if i+half < len(perCore) {
+			b.WriteString("    ")
+			writeCoreEntry(b, perCore[i+half])
+		}
+		b.WriteByte('\n')
+	}
+}
+
+func writeCoreEntry(b *strings.Builder, c CoreStatus) {
+	tc := tempColor(c.TempC)
+	freq := c.Freq
+	if freq == "" {
+		freq = "---"
+	}
+	fmt.Fprintf(b, "  %s%-9s%s %s%-10s%s %s%-8s%s",
+		ansiDim, c.Label+":", ansiReset,
+		ansiWhite, freq, ansiReset,
+		tc, c.Temp, ansiReset)
+}
+
+func writeThrottleField(b *strings.Builder, label, value string) {
+	color := ansiWhite
+	if v, err := strconv.ParseInt(value, 10, 64); err == nil && v > 0 {
+		color = ansiRed
+	}
+	fmt.Fprintf(b, "  %s%-18s%s %s%s%s\n", ansiDim, label+":", ansiReset, color, value, ansiReset)
+}
+
+func tempColor(c float64) string {
+	switch {
+	case c < 0:
+		return ansiWhite
+	case c < 60:
+		return ansiGreen
+	case c < 80:
+		return ansiYellow
+	default:
+		return ansiRed
+	}
 }

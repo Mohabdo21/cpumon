@@ -26,6 +26,7 @@ type Monitor struct {
 	prevStat    CPUTimes
 
 	coreFreqBuf map[int]string
+	coreBuf     []CoreStatus
 	lineBuf     []string
 }
 
@@ -63,6 +64,7 @@ func NewMonitor() (*Monitor, error) {
 		throttleOK:  throttleOK,
 		prevStat:    readCPUStat(fr),
 		coreFreqBuf: make(map[int]string, 32),
+		coreBuf:     make([]CoreStatus, 0, 32),
 		lineBuf:     make([]string, 0, 32),
 	}
 
@@ -84,7 +86,7 @@ func (m *Monitor) collect() Metrics {
 	usage := calcUsage(m.prevStat, cur)
 	m.prevStat = cur
 
-	cpuStatus, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, &m.lineBuf)
+	cores, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, &m.coreBuf)
 	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
 
 	return Metrics{
@@ -98,7 +100,7 @@ func (m *Monitor) collect() Metrics {
 		TurboBoost:  readTurboBoost(m.fr),
 		AvgFreq:     avgFreq,
 		CPUUsage:    usage,
-		CPUStatus:   cpuStatus,
+		Cores:       cores,
 		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
 		SensorsHint: !m.sensorsOK,
@@ -122,6 +124,9 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 		}
 	})
 
+	fmt.Print("\033[?1049h")
+	defer fmt.Print("\033[?1049l")
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -130,7 +135,6 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("\nShutting down...")
 			wg.Wait()
 			return nil
 		case <-ticker.C:
