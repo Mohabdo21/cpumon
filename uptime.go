@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-const procUptimePath = "/proc/uptime"
-const kernelReleasePath = "/proc/sys/kernel/osrelease"
-
 func readUptime(fr FileReader) string {
 	data, err := fr.Read(procUptimePath)
 	if err != nil {

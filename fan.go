@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var fanFilterRe = regexp.MustCompile(`(level:|speed:|status:)`)
 
 func discoverFanFiles() []string {
 	patterns := []string{

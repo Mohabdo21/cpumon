@@ -4,9 +4,18 @@ import (
 	"bufio"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+)
+
+var (
+	cpuNumRe  = regexp.MustCompile(`cpu(\d+)`)
+	packageRe = regexp.MustCompile(`^(Package id \d+):(\s+)(\S.*)`)
+	coreRe    = regexp.MustCompile(`^(Core\s+(\d+)):(\s+)(\S.*)`)
+	amdTctlRe = regexp.MustCompile(`^(Tctl|Tdie|Tccd\d*):(\s+)(\S.*)`)
+	coreNumRe = regexp.MustCompile(`Core\s*(\d+)`)
 )
 
 func discoverCPUTopology(fr FileReader) []CPUFreqInfo {
@@ -57,13 +66,6 @@ func discoverHwmonCPU(fr FileReader) string {
 		}
 	}
 	return ""
-}
-
-func readOrNA(fr FileReader, path string) string {
-	if s, err := fr.Read(path); err == nil {
-		return s
-	}
-	return "N/A"
 }
 
 func readFrequencies(fr FileReader, infos []CPUFreqInfo, coreFreqs map[int]string) string {

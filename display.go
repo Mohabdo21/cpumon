@@ -6,23 +6,6 @@ import (
 	"time"
 )
 
-type Metrics struct {
-	DeviceModel string
-	CPUModel    string
-	Kernel      string
-	Uptime      string
-	LoadAvg     string
-	Governor    string
-	EnergyBias  string
-	TurboBoost  string
-	AvgFreq     string
-	CPUUsage    float64
-	CPUStatus   string
-	Throttle    ThrottleInfo
-	FanStatus   string
-	SensorsHint bool
-}
-
 func display(m Metrics, interval time.Duration) {
 	var b strings.Builder
 	b.Grow(1024)

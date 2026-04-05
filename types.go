@@ -4,29 +4,40 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"regexp"
 	"strconv"
 	"strings"
 )
 
 const (
+	// CPU
 	cpuGovernorPath   = "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
 	cpuEnergyBiasPath = "/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference"
+	cpuInfoPath       = "/proc/cpuinfo"
+	intelNoTurboPath  = "/sys/devices/system/cpu/intel_pstate/no_turbo"
+	cpuBoostPath      = "/sys/devices/system/cpu/cpufreq/boost"
+
+	// Thermal throttle
 	cpuThrottlePath   = "/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count"
 	pkgThrottleTotal  = "/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_total_time_ms"
 	pkgThrottleMax    = "/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_max_time_ms"
 	coreThrottleCount = "/sys/devices/system/cpu/cpu0/thermal_throttle/core_throttle_count"
 	coreThrottleTotal = "/sys/devices/system/cpu/cpu0/thermal_throttle/core_throttle_total_time_ms"
 	coreThrottleMax   = "/sys/devices/system/cpu/cpu0/thermal_throttle/core_throttle_max_time_ms"
-	cpuInfoPath       = "/proc/cpuinfo"
+
+	// Proc
 	procLoadAvgPath   = "/proc/loadavg"
-	intelNoTurboPath  = "/sys/devices/system/cpu/intel_pstate/no_turbo"
-	cpuBoostPath      = "/sys/devices/system/cpu/cpufreq/boost"
+	procStatPath      = "/proc/stat"
+	procUptimePath    = "/proc/uptime"
+	kernelReleasePath = "/proc/sys/kernel/osrelease"
+
+	// DMI / device
 	dmiProductName    = "/sys/class/dmi/id/product_name"
 	dmiProductVersion = "/sys/class/dmi/id/product_version"
 	dmiBoardName      = "/sys/class/dmi/id/board_name"
 	dmiBoardVendor    = "/sys/class/dmi/id/board_vendor"
-	thinkpadFanPath   = "/proc/acpi/ibm/fan"
+
+	// Fan
+	thinkpadFanPath = "/proc/acpi/ibm/fan"
 )
 
 var (
@@ -35,14 +46,22 @@ var (
 	ErrNoMonitorData = errors.New("no monitoring data available (VM or container environment?)")
 )
 
-var (
-	cpuNumRe    = regexp.MustCompile(`cpu(\d+)`)
-	packageRe   = regexp.MustCompile(`^(Package id \d+):(\s+)(\S.*)`)
-	coreRe      = regexp.MustCompile(`^(Core\s+(\d+)):(\s+)(\S.*)`)
-	amdTctlRe   = regexp.MustCompile(`^(Tctl|Tdie|Tccd\d*):(\s+)(\S.*)`)
-	coreNumRe   = regexp.MustCompile(`Core\s*(\d+)`)
-	fanFilterRe = regexp.MustCompile(`(level:|speed:|status:)`)
-)
+type Metrics struct {
+	DeviceModel string
+	CPUModel    string
+	Kernel      string
+	Uptime      string
+	LoadAvg     string
+	Governor    string
+	EnergyBias  string
+	TurboBoost  string
+	AvgFreq     string
+	CPUUsage    float64
+	CPUStatus   string
+	Throttle    ThrottleInfo
+	FanStatus   string
+	SensorsHint bool
+}
 
 type CPUFreqInfo struct {
 	Path   string
@@ -87,6 +106,13 @@ func (sysCmdRunner) Run(name string, args ...string) (string, error) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func readOrNA(fr FileReader, path string) string {
+	if s, err := fr.Read(path); err == nil {
+		return s
+	}
+	return "N/A"
 }
 
 func readInt(fr FileReader, path string) (int64, bool) {

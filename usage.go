@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-const procStatPath = "/proc/stat"
-
 type CPUTimes struct {
 	Idle  uint64
 	Total uint64
