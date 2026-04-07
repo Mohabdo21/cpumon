@@ -24,10 +24,14 @@ type Monitor struct {
 	sensorsOK   bool
 	throttleOK  bool
 	prevStat    CPUTimes
+	prevCore    map[int]CPUTimes
+	cpuCoreMap  map[int]int
 
 	coreFreqBuf map[int]string
 	coreBuf     []CoreStatus
 	lineBuf     []string
+
+	stats SessionStats
 }
 
 func NewMonitor() (*Monitor, error) {
@@ -63,6 +67,8 @@ func NewMonitor() (*Monitor, error) {
 		sensorsOK:   sensorsOK,
 		throttleOK:  throttleOK,
 		prevStat:    readCPUStat(fr),
+		prevCore:    readPerCoreStat(fr),
+		cpuCoreMap:  discoverCPUCoreMap(fr),
 		coreFreqBuf: make(map[int]string, 32),
 		coreBuf:     make([]CoreStatus, 0, 32),
 		lineBuf:     make([]string, 0, 32),
@@ -86,8 +92,14 @@ func (m *Monitor) collect() Metrics {
 	usage := calcUsage(m.prevStat, cur)
 	m.prevStat = cur
 
-	cores, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, &m.coreBuf)
+	curCore := readPerCoreStat(m.fr)
+	coreUsage := calcPerCoreUsage(m.prevCore, curCore, m.cpuCoreMap)
+	m.prevCore = curCore
+
+	cores, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, coreUsage, &m.coreBuf)
 	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
+
+	m.updateStats(usage, cores)
 
 	return Metrics{
 		DeviceModel: m.deviceModel,
@@ -104,7 +116,28 @@ func (m *Monitor) collect() Metrics {
 		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
 		SensorsHint: !m.sensorsOK,
+		Stats:       m.stats,
 	}
+}
+
+func (m *Monitor) updateStats(usage float64, cores []CoreStatus) {
+	if usage >= 0 && usage > m.stats.PeakCPU {
+		m.stats.PeakCPU = usage
+	}
+
+	for _, c := range cores {
+		if !c.IsPackage || c.TempC < 0 {
+			continue
+		}
+		if m.stats.Samples == 0 || c.TempC > m.stats.PeakTemp {
+			m.stats.PeakTemp = c.TempC
+		}
+		if m.stats.Samples == 0 || c.TempC < m.stats.MinTemp {
+			m.stats.MinTemp = c.TempC
+		}
+		break
+	}
+	m.stats.Samples++
 }
 
 func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
@@ -115,6 +148,16 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
 
+	winCh := make(chan os.Signal, 1)
+	signal.Notify(winCh, syscall.SIGWINCH)
+	defer signal.Stop(winCh)
+
+	orig, rawErr := enableRawMode()
+	if rawErr == nil {
+		defer restoreTermMode(orig)
+	}
+
+	keyCh := make(chan byte, 1)
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		select {
@@ -123,6 +166,19 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 		case <-ctx.Done():
 		}
 	})
+	go func() {
+		var buf [1]byte
+		for {
+			n, err := os.Stdin.Read(buf[:])
+			if n == 1 && (buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 0x03) {
+				keyCh <- buf[0]
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
 
 	fmt.Print("\033[?1049h")
 	defer fmt.Print("\033[?1049l")
@@ -130,15 +186,23 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	display(m.collect(), interval)
+	last := m.collect()
+	display(last, interval)
 
 	for {
 		select {
 		case <-ctx.Done():
 			wg.Wait()
 			return nil
+		case <-keyCh:
+			cancel()
+			wg.Wait()
+			return nil
 		case <-ticker.C:
-			display(m.collect(), interval)
+			last = m.collect()
+			display(last, interval)
+		case <-winCh:
+			display(last, interval)
 		}
 	}
 }

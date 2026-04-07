@@ -20,6 +20,8 @@ const (
 )
 
 func display(m Metrics, interval time.Duration) {
+	width := termWidth()
+
 	var b strings.Builder
 	b.Grow(2048)
 
@@ -50,14 +52,21 @@ func display(m Metrics, interval time.Duration) {
 			writeField(&b, "Avg Freq", m.AvgFreq)
 		}
 		if m.CPUUsage >= 0 {
-			writeUsageBar(&b, m.CPUUsage, 30)
+			barWidth := min(max((width-30)/2, 10), 40)
+			writeUsageBar(&b, m.CPUUsage, barWidth, m.Stats.PeakCPU)
 		}
 		b.WriteByte('\n')
 	}
 
 	if len(m.Cores) > 0 {
 		writeHeader(&b, "CPU Status")
-		writeCoreGrid(&b, m.Cores)
+		cols := 1
+		if width >= 120 {
+			cols = 3
+		} else if width >= 80 {
+			cols = 2
+		}
+		writeCoreGrid(&b, m.Cores, m.Stats, cols)
 		b.WriteByte('\n')
 	}
 
@@ -87,7 +96,7 @@ func display(m Metrics, interval time.Duration) {
 			ansiDim, ansiYellow, ansiReset+ansiDim, ansiReset)
 	}
 
-	fmt.Fprintf(&b, "  %sRefreshing every %v... (Ctrl+C to exit)%s\n", ansiDim, interval, ansiReset)
+	fmt.Fprintf(&b, "  %sRefreshing every %v... (q or Ctrl+C to exit)%s\n", ansiDim, interval, ansiReset)
 
 	fmt.Print(b.String())
 }
@@ -100,7 +109,7 @@ func writeField(b *strings.Builder, label, value string) {
 	fmt.Fprintf(b, "  %s%-14s%s %s%s%s\n", ansiDim, label+":", ansiReset, ansiWhite, value, ansiReset)
 }
 
-func writeUsageBar(b *strings.Builder, pct float64, width int) {
+func writeUsageBar(b *strings.Builder, pct float64, width int, peak float64) {
 	n := max(min(int(pct/100*float64(width)+0.5), width), 0)
 
 	color := ansiGreen
@@ -110,31 +119,39 @@ func writeUsageBar(b *strings.Builder, pct float64, width int) {
 		color = ansiYellow
 	}
 
-	fmt.Fprintf(b, "  %s%-14s%s %s[%s%s%s%s]%s %s%4.1f%%%s\n",
+	fmt.Fprintf(b, "  %s%-14s%s %s[%s%s%s%s]%s %s%4.1f%%%s  %speak: %.1f%%%s\n",
 		ansiDim, "CPU Usage:", ansiReset,
 		ansiDim,
 		color+ansiBold, strings.Repeat("█", n),
 		ansiReset+ansiDim, strings.Repeat("░", width-n),
 		ansiReset,
-		color, pct, ansiReset)
+		color, pct, ansiReset,
+		ansiDim, peak, ansiReset)
 }
 
-func writeCoreGrid(b *strings.Builder, cores []CoreStatus) {
+func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, cols int) {
 	// Package / global temps first, on their own lines.
 	for _, c := range cores {
 		if !c.IsPackage {
 			continue
 		}
 		tc := tempColor(c.TempC)
+		peakStr := ""
+		if stats.Samples > 0 && c.TempC >= 0 {
+			peakStr = fmt.Sprintf("  %s[%.0f°C / %.0f°C]%s",
+				ansiDim, stats.MinTemp, stats.PeakTemp, ansiReset)
+		}
 		if c.Limit != "" {
-			fmt.Fprintf(b, "  %s%-14s%s %s%s%s  %s%s%s\n",
+			fmt.Fprintf(b, "  %s%-14s%s %s%s%s  %s%s%s%s\n",
 				ansiDim, c.Label+":", ansiReset,
 				tc, c.Temp, ansiReset,
-				ansiDim, c.Limit, ansiReset)
+				ansiDim, c.Limit, ansiReset,
+				peakStr)
 		} else {
-			fmt.Fprintf(b, "  %s%-14s%s %s%s%s\n",
+			fmt.Fprintf(b, "  %s%-14s%s %s%s%s%s\n",
 				ansiDim, c.Label+":", ansiReset,
-				tc, c.Temp, ansiReset)
+				tc, c.Temp, ansiReset,
+				peakStr)
 		}
 	}
 
@@ -149,13 +166,18 @@ func writeCoreGrid(b *strings.Builder, cores []CoreStatus) {
 		return
 	}
 
-	// Two-column grid: left half / right half.
-	half := (len(perCore) + 1) / 2
-	for i := range half {
-		writeCoreEntry(b, perCore[i])
-		if i+half < len(perCore) {
-			b.WriteString("    ")
-			writeCoreEntry(b, perCore[i+half])
+	// N-column grid.
+	rows := (len(perCore) + cols - 1) / cols
+	for r := range rows {
+		for c := range cols {
+			idx := r + c*rows
+			if idx >= len(perCore) {
+				break
+			}
+			if c > 0 {
+				b.WriteString("    ")
+			}
+			writeCoreEntry(b, perCore[idx])
 		}
 		b.WriteByte('\n')
 	}
@@ -167,9 +189,20 @@ func writeCoreEntry(b *strings.Builder, c CoreStatus) {
 	if freq == "" {
 		freq = "---"
 	}
-	fmt.Fprintf(b, "  %s%-9s%s %s%-10s%s %s%-8s%s",
+	usage := "  ---"
+	if c.Usage >= 0 {
+		uc := ansiGreen
+		if c.Usage >= 80 {
+			uc = ansiRed
+		} else if c.Usage >= 50 {
+			uc = ansiYellow
+		}
+		usage = fmt.Sprintf("%s%4.0f%%%s", uc, c.Usage, ansiReset)
+	}
+	fmt.Fprintf(b, "  %s%-9s%s %s%-10s%s %s %s%-8s%s",
 		ansiDim, c.Label+":", ansiReset,
 		ansiWhite, freq, ansiReset,
+		usage,
 		tc, c.Temp, ansiReset)
 }
 

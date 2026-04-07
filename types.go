@@ -46,6 +46,13 @@ var (
 	ErrNoMonitorData = errors.New("no monitoring data available (VM or container environment?)")
 )
 
+type SessionStats struct {
+	PeakCPU  float64
+	PeakTemp float64
+	MinTemp  float64
+	Samples  uint64
+}
+
 type Metrics struct {
 	DeviceModel string
 	CPUModel    string
@@ -61,6 +68,7 @@ type Metrics struct {
 	Throttle    ThrottleInfo
 	FanStatus   string
 	SensorsHint bool
+	Stats       SessionStats
 }
 
 type CPUFreqInfo struct {
@@ -78,6 +86,7 @@ type HwmonTemp struct {
 type CoreStatus struct {
 	Label     string
 	Freq      string
+	Usage     float64
 	Temp      string
 	Limit     string
 	TempC     float64
