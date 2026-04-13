@@ -58,15 +58,45 @@ func display(m Metrics, interval time.Duration) {
 		b.WriteByte('\n')
 	}
 
+	if m.Power.Available && len(m.Power.Zones) > 0 {
+		writeHeader(&b, "Power Consumption")
+		var total float64
+		for _, z := range m.Power.Zones {
+			if z.Name == "Package" {
+				total += z.Watts
+			}
+		}
+		for _, z := range m.Power.Zones {
+			color := ansiWhite
+			if z.Name == "Package" && z.Watts > 28 {
+				color = ansiRed
+			} else if z.Name == "Package" && z.Watts > 15 {
+				color = ansiYellow
+			}
+			fmt.Fprintf(&b, "  %s%-14s%s %s%5.1f W%s\n",
+				ansiDim, z.Name+":", ansiReset, color, z.Watts, ansiReset)
+		}
+		if total == 0 {
+			for _, z := range m.Power.Zones {
+				total += z.Watts
+			}
+		}
+		b.WriteByte('\n')
+	}
+
 	if len(m.Cores) > 0 {
-		writeHeader(&b, "CPU Status")
+		title := "CPU Status"
+		if label := coreClassLabel(m.Topology); label != "" {
+			title = fmt.Sprintf("CPU Status [%s]", label)
+		}
+		writeHeader(&b, title)
 		cols := 1
 		if width >= 120 {
 			cols = 3
 		} else if width >= 80 {
 			cols = 2
 		}
-		writeCoreGrid(&b, m.Cores, m.Stats, cols)
+		writeCoreGrid(&b, m.Cores, m.Stats, cols, m.Topology)
 		b.WriteByte('\n')
 	}
 
@@ -129,8 +159,7 @@ func writeUsageBar(b *strings.Builder, pct float64, width int, peak float64) {
 		ansiDim, peak, ansiReset)
 }
 
-func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, cols int) {
-	// Package / global temps first, on their own lines.
+func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, cols int, topo CoreTopology) {
 	for _, c := range cores {
 		if !c.IsPackage {
 			continue
@@ -155,7 +184,13 @@ func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, c
 		}
 	}
 
-	// Collect per-core entries.
+	if topo.Hybrid {
+		perf, eff := classifyCores(cores, topo)
+		writeCoreGroup(b, "P-Cores", perf, cols)
+		writeCoreGroup(b, "E-Cores", eff, cols)
+		return
+	}
+
 	var perCore []CoreStatus
 	for i := range cores {
 		if !cores[i].IsPackage {
@@ -166,18 +201,29 @@ func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, c
 		return
 	}
 
-	// N-column grid.
-	rows := (len(perCore) + cols - 1) / cols
+	writeCoreRows(b, perCore, cols)
+}
+
+func writeCoreGroup(b *strings.Builder, title string, cores []CoreStatus, cols int) {
+	if len(cores) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "  %s%s%s%s\n", ansiDim, ansiCyan, title, ansiReset)
+	writeCoreRows(b, cores, cols)
+}
+
+func writeCoreRows(b *strings.Builder, cores []CoreStatus, cols int) {
+	rows := (len(cores) + cols - 1) / cols
 	for r := range rows {
 		for c := range cols {
 			idx := r + c*rows
-			if idx >= len(perCore) {
+			if idx >= len(cores) {
 				break
 			}
 			if c > 0 {
 				b.WriteString("    ")
 			}
-			writeCoreEntry(b, perCore[idx])
+			writeCoreEntry(b, cores[idx])
 		}
 		b.WriteByte('\n')
 	}
@@ -225,4 +271,29 @@ func tempColor(c float64) string {
 	default:
 		return ansiRed
 	}
+}
+
+func printSessionSummary(s SessionStats) {
+	duration := time.Since(s.StartTime)
+	mins := int(duration.Minutes())
+	secs := int(duration.Seconds()) % 60
+
+	fmt.Printf("\n%s%s-- Session Summary --%s\n", ansiBold, ansiCyan, ansiReset)
+	fmt.Printf("  %s%-14s%s %dm%ds (%d samples)\n", ansiDim, "Duration:", ansiReset, mins, secs, s.Samples)
+
+	if s.Samples > 0 {
+		avgCPU := s.TotalCPU / float64(s.Samples)
+		fmt.Printf("  %s%-14s%s avg %.1f%%  peak %.1f%%\n", ansiDim, "CPU Usage:", ansiReset, avgCPU, s.PeakCPU)
+	}
+
+	if s.Samples > 0 && s.PeakTemp > 0 {
+		fmt.Printf("  %s%-14s%s min %.0f°C  peak %.0f°C\n", ansiDim, "Temperature:", ansiReset, s.MinTemp, s.PeakTemp)
+	}
+
+	if s.PowerSamples > 0 {
+		avgPower := s.TotalPower / float64(s.PowerSamples)
+		fmt.Printf("  %s%-14s%s avg %.1f W  peak %.1f W\n", ansiDim, "Power:", ansiReset, avgPower, s.PeakPower)
+	}
+
+	fmt.Println()
 }

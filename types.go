@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -47,10 +48,15 @@ var (
 )
 
 type SessionStats struct {
-	PeakCPU  float64
-	PeakTemp float64
-	MinTemp  float64
-	Samples  uint64
+	PeakCPU      float64
+	PeakTemp     float64
+	MinTemp      float64
+	Samples      uint64
+	StartTime    time.Time
+	TotalCPU     float64
+	PeakPower    float64
+	TotalPower   float64
+	PowerSamples uint64
 }
 
 type Metrics struct {
@@ -67,8 +73,10 @@ type Metrics struct {
 	Cores       []CoreStatus
 	Throttle    ThrottleInfo
 	FanStatus   string
+	Power       PowerReading
 	SensorsHint bool
 	Stats       SessionStats
+	Topology    CoreTopology
 }
 
 type CPUFreqInfo struct {

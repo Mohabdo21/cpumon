@@ -31,7 +31,9 @@ type Monitor struct {
 	coreBuf     []CoreStatus
 	lineBuf     []string
 
-	stats SessionStats
+	stats    SessionStats
+	topology CoreTopology
+	rapl     raplState
 }
 
 func NewMonitor() (*Monitor, error) {
@@ -74,6 +76,12 @@ func NewMonitor() (*Monitor, error) {
 		lineBuf:     make([]string, 0, 32),
 	}
 
+	m.topology = discoverCoreClasses(fr, m.cpuCoreMap)
+
+	if zones := discoverRAPL(fr); len(zones) > 0 {
+		m.rapl = newRAPLState(fr, zones)
+	}
+
 	hasFreq := len(cpuFreqs) > 0
 	hasThermal := sensorsOK || len(hwmonTemps) > 0
 	hasFan := thinkpadFan || len(fanFiles) > 0
@@ -98,8 +106,9 @@ func (m *Monitor) collect() Metrics {
 
 	cores, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, coreUsage, &m.coreBuf)
 	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
+	power := m.rapl.Read(m.fr)
 
-	m.updateStats(usage, cores)
+	m.updateStats(usage, cores, power)
 
 	return Metrics{
 		DeviceModel: m.deviceModel,
@@ -115,14 +124,19 @@ func (m *Monitor) collect() Metrics {
 		Cores:       cores,
 		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
+		Power:       power,
 		SensorsHint: !m.sensorsOK,
 		Stats:       m.stats,
+		Topology:    m.topology,
 	}
 }
 
-func (m *Monitor) updateStats(usage float64, cores []CoreStatus) {
-	if usage >= 0 && usage > m.stats.PeakCPU {
-		m.stats.PeakCPU = usage
+func (m *Monitor) updateStats(usage float64, cores []CoreStatus, power PowerReading) {
+	if usage >= 0 {
+		if usage > m.stats.PeakCPU {
+			m.stats.PeakCPU = usage
+		}
+		m.stats.TotalCPU += usage
 	}
 
 	for _, c := range cores {
@@ -137,10 +151,26 @@ func (m *Monitor) updateStats(usage float64, cores []CoreStatus) {
 		}
 		break
 	}
+
+	if power.Available {
+		for _, z := range power.Zones {
+			if z.Name == "Package" {
+				if z.Watts > m.stats.PeakPower {
+					m.stats.PeakPower = z.Watts
+				}
+				m.stats.TotalPower += z.Watts
+				m.stats.PowerSamples++
+				break
+			}
+		}
+	}
+
 	m.stats.Samples++
 }
 
 func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
+	m.stats.StartTime = time.Now()
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -181,6 +211,7 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	}()
 
 	fmt.Print("\033[?1049h")
+	defer func() { printSessionSummary(m.stats) }()
 	defer fmt.Print("\033[?1049l")
 
 	ticker := time.NewTicker(interval)

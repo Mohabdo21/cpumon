@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.2.1"
 
 func main() {
 	interval := flag.Duration("i", time.Second, "")
@@ -21,6 +21,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Options:")
 		fmt.Fprintln(os.Stderr, "  -i duration   refresh interval (default 1s, min 100ms)")
 		fmt.Fprintln(os.Stderr, "  -h            show this help")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Note: run as root (or with cap_dac_read_search) for power consumption data.")
 	}
 
 	flag.Parse()
