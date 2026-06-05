@@ -38,9 +38,18 @@ aur-clone:
 	fi
 
 aur-update: aur-clone
-	@echo "Updating AUR package to v$(VERSION)..."
-	@sed -i "s/^pkgver=.*/pkgver=$(VERSION)/" $(AUR_DIR)/PKGBUILD
-	@sed -i "s/^pkgrel=.*/pkgrel=1/" $(AUR_DIR)/PKGBUILD
+	@cd $(AUR_DIR) && \
+		git pull
+	@echo "Current version: $$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2) - $$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2)"
+	@read -p "Increment pkgrel? (y/n): " inc; \
+		if [ "$$inc" = "y" ]; then \
+			cd $(AUR_DIR) && \
+			REL=$$(grep '^pkgrel=' PKGBUILD | cut -d= -f2); \
+			NEWREL=$$((REL + 1)); \
+			sed -i "s/^pkgrel=.*/pkgrel=$$NEWREL/" PKGBUILD; \
+		else \
+			sed -i "s/^pkgrel=.*/pkgrel=1/" $(AUR_DIR)/PKGBUILD; \
+		fi
 	@cp aur/PKGBUILD $(AUR_DIR)/PKGBUILD
 	@sed -i "s/^pkgver=.*/pkgver=$(VERSION)/" $(AUR_DIR)/PKGBUILD
 	@cd $(AUR_DIR) && SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
