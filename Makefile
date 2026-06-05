@@ -38,28 +38,40 @@ aur-clone:
 	fi
 
 aur-update: aur-clone
-	@cd $(AUR_DIR) && \
-		git pull
-	@echo "Current version: $$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2) - $$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2)"
-	@read -p "Increment pkgrel? (y/n): " inc; \
+	@cd $(AUR_DIR) && git pull
+	@CURRENT_VER=$$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
+	CURRENT_REL=$$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
+	NEW_VER=$(VERSION); \
+	if [ "$$CURRENT_VER" != "$$NEW_VER" ]; then \
+		echo "Version changed: $$CURRENT_VER -> $$NEW_VER"; \
+		sed -i "s/^pkgver=.*/pkgver=$$NEW_VER/" $(AUR_DIR)/PKGBUILD; \
+		sed -i "s/^pkgrel=.*/pkgrel=1/" $(AUR_DIR)/PKGBUILD; \
+		echo "pkgrel reset to 1"; \
+	else \
+		echo "Version unchanged: $$CURRENT_VER"; \
+		read -p "Increment pkgrel? (y/n): " inc; \
 		if [ "$$inc" = "y" ]; then \
-			cd $(AUR_DIR) && \
-			REL=$$(grep '^pkgrel=' PKGBUILD | cut -d= -f2); \
-			NEWREL=$$((REL + 1)); \
-			sed -i "s/^pkgrel=.*/pkgrel=$$NEWREL/" PKGBUILD; \
+			NEW_REL=$$((CURRENT_REL + 1)); \
+			sed -i "s/^pkgrel=.*/pkgrel=$$NEW_REL/" $(AUR_DIR)/PKGBUILD; \
+			echo "pkgrel incremented to $$NEW_REL"; \
 		else \
-			sed -i "s/^pkgrel=.*/pkgrel=1/" $(AUR_DIR)/PKGBUILD; \
-		fi
-	@cp aur/PKGBUILD $(AUR_DIR)/PKGBUILD
-	@sed -i "s/^pkgver=.*/pkgver=$(VERSION)/" $(AUR_DIR)/PKGBUILD
-	@cd $(AUR_DIR) && SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
+			echo "pkgrel left as $$CURRENT_REL"; \
+		fi \
+	fi
+	@echo "Updating sha256sums..."
+	@cd $(AUR_DIR) && \
+		SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
 		sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" PKGBUILD
 	@cd $(AUR_DIR) && makepkg --printsrcinfo > .SRCINFO
-	@echo "PKGBUILD and .SRCINFO updated for v$(VERSION)"
+	@echo "PKGBUILD and .SRCINFO updated for $(VERSION)"
 
 aur-publish: aur-update
 	@cd $(AUR_DIR) && \
-		git add PKGBUILD .SRCINFO && \
-		git commit -m "Update to $(VERSION)" && \
-		git push
-	@echo "Published cpumon v$(VERSION) to AUR"
+		if ! git diff --quiet PKGBUILD .SRCINFO; then \
+			git add PKGBUILD .SRCINFO && \
+			git commit -m "Update to $(VERSION)" && \
+			git push && \
+			echo "Published cpumon to AUR"; \
+		else \
+			echo "No changes to commit."; \
+		fi
