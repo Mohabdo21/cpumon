@@ -39,10 +39,16 @@ cpumon -i 500ms  # 500ms refresh
 cpumon -i 2s     # 2 second refresh
 ```
 
-Requires root for some metrics. Install `lm-sensors` for better thermal data:
+Requires root for some metrics like power consumption, set read/search file capabilities with:
 
 ```
-sudo dnf install lm_sensors
+sudo setcap cap_dac_read_search=ep /bin/cpumon
+```
+
+Install `lm-sensors` for better thermal data:
+
+```
+sudo pacman -S lm_sensors
 sudo sensors-detect
 ```
 
