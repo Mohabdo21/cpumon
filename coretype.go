@@ -81,7 +81,9 @@ func detectIntelHybrid(fr FileReader, coreMap map[int]int, topo *CoreTopology) b
 }
 
 func detectAMDPreferred(fr FileReader, coreMap map[int]int, topo *CoreTopology) bool {
-	matches, _ := filepath.Glob("/sys/devices/system/cpu/cpu[0-9]*/cpufreq/amd_pstate_prefcore_ranking")
+	matches, _ := filepath.Glob(
+		"/sys/devices/system/cpu/cpu[0-9]*/cpufreq/amd_pstate_prefcore_ranking",
+	)
 	if len(matches) == 0 {
 		return false
 	}
@@ -95,7 +97,10 @@ func detectAMDPreferred(fr FileReader, coreMap map[int]int, topo *CoreTopology) 
 		}
 		seen[coreID] = true
 
-		path := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq/amd_pstate_prefcore_ranking", cpu)
+		path := fmt.Sprintf(
+			"/sys/devices/system/cpu/cpu%d/cpufreq/amd_pstate_prefcore_ranking",
+			cpu,
+		)
 		if rank, ok := readInt(fr, path); ok {
 			rankings[coreID] = rank
 		}

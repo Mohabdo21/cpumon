@@ -24,7 +24,12 @@ func discoverFanFiles() []string {
 	return files
 }
 
-func readFanStatus(fr FileReader, fanFiles []string, thinkpadFan bool, lineBuf *[]string) (string, error) {
+func readFanStatus(
+	fr FileReader,
+	fanFiles []string,
+	thinkpadFan bool,
+	lineBuf *[]string,
+) (string, error) {
 	if thinkpadFan {
 		if out, err := readThinkPadFan(fr, lineBuf); err == nil {
 			return out, nil

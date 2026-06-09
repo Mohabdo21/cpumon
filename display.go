@@ -126,7 +126,13 @@ func display(m Metrics, interval time.Duration) {
 			ansiDim, ansiYellow, ansiReset+ansiDim, ansiReset)
 	}
 
-	fmt.Fprintf(&b, "  %sRefreshing every %v... (q or Ctrl+C to exit)%s\n", ansiDim, interval, ansiReset)
+	fmt.Fprintf(
+		&b,
+		"  %sRefreshing every %v... (q or Ctrl+C to exit)%s\n",
+		ansiDim,
+		interval,
+		ansiReset,
+	)
 
 	fmt.Print(b.String())
 }
@@ -136,7 +142,16 @@ func writeHeader(b *strings.Builder, title string) {
 }
 
 func writeField(b *strings.Builder, label, value string) {
-	fmt.Fprintf(b, "  %s%-14s%s %s%s%s\n", ansiDim, label+":", ansiReset, ansiWhite, value, ansiReset)
+	fmt.Fprintf(
+		b,
+		"  %s%-14s%s %s%s%s\n",
+		ansiDim,
+		label+":",
+		ansiReset,
+		ansiWhite,
+		value,
+		ansiReset,
+	)
 }
 
 func writeUsageBar(b *strings.Builder, pct float64, width int, peak float64) {
@@ -159,7 +174,13 @@ func writeUsageBar(b *strings.Builder, pct float64, width int, peak float64) {
 		ansiDim, peak, ansiReset)
 }
 
-func writeCoreGrid(b *strings.Builder, cores []CoreStatus, stats SessionStats, cols int, topo CoreTopology) {
+func writeCoreGrid(
+	b *strings.Builder,
+	cores []CoreStatus,
+	stats SessionStats,
+	cols int,
+	topo CoreTopology,
+) {
 	for _, c := range cores {
 		if !c.IsPackage {
 			continue
@@ -279,20 +300,49 @@ func printSessionSummary(s SessionStats) {
 	secs := int(duration.Seconds()) % 60
 
 	fmt.Printf("\n%s%s-- Session Summary --%s\n", ansiBold, ansiCyan, ansiReset)
-	fmt.Printf("  %s%-14s%s %dm%ds (%d samples)\n", ansiDim, "Duration:", ansiReset, mins, secs, s.Samples)
+	fmt.Printf(
+		"  %s%-14s%s %dm%ds (%d samples)\n",
+		ansiDim,
+		"Duration:",
+		ansiReset,
+		mins,
+		secs,
+		s.Samples,
+	)
 
 	if s.Samples > 0 {
 		avgCPU := s.TotalCPU / float64(s.Samples)
-		fmt.Printf("  %s%-14s%s avg %.1f%%  peak %.1f%%\n", ansiDim, "CPU Usage:", ansiReset, avgCPU, s.PeakCPU)
+		fmt.Printf(
+			"  %s%-14s%s avg %.1f%%  peak %.1f%%\n",
+			ansiDim,
+			"CPU Usage:",
+			ansiReset,
+			avgCPU,
+			s.PeakCPU,
+		)
 	}
 
 	if s.Samples > 0 && s.PeakTemp > 0 {
-		fmt.Printf("  %s%-14s%s min %.0f°C  peak %.0f°C\n", ansiDim, "Temperature:", ansiReset, s.MinTemp, s.PeakTemp)
+		fmt.Printf(
+			"  %s%-14s%s min %.0f°C  peak %.0f°C\n",
+			ansiDim,
+			"Temperature:",
+			ansiReset,
+			s.MinTemp,
+			s.PeakTemp,
+		)
 	}
 
 	if s.PowerSamples > 0 {
 		avgPower := s.TotalPower / float64(s.PowerSamples)
-		fmt.Printf("  %s%-14s%s avg %.1f W  peak %.1f W\n", ansiDim, "Power:", ansiReset, avgPower, s.PeakPower)
+		fmt.Printf(
+			"  %s%-14s%s avg %.1f W  peak %.1f W\n",
+			ansiDim,
+			"Power:",
+			ansiReset,
+			avgPower,
+			s.PeakPower,
+		)
 	}
 
 	fmt.Println()

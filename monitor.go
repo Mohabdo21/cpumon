@@ -104,7 +104,15 @@ func (m *Monitor) collect() Metrics {
 	coreUsage := calcPerCoreUsage(m.prevCore, curCore, m.cpuCoreMap)
 	m.prevCore = curCore
 
-	cores, _ := readCPUThermal(m.fr, m.cr, m.sensorsOK, m.hwmonTemps, m.coreFreqBuf, coreUsage, &m.coreBuf)
+	cores, _ := readCPUThermal(
+		m.fr,
+		m.cr,
+		m.sensorsOK,
+		m.hwmonTemps,
+		m.coreFreqBuf,
+		coreUsage,
+		&m.coreBuf,
+	)
 	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
 	power := m.rapl.Read(m.fr)
 

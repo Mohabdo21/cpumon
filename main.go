@@ -22,7 +22,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  -i duration   refresh interval (default 1s, min 100ms)")
 		fmt.Fprintln(os.Stderr, "  -h            show this help")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Note: run as root (or with cap_dac_read_search) for power consumption data.")
+		fmt.Fprintln(
+			os.Stderr,
+			"Note: run as root (or with cap_dac_read_search) for power consumption data.",
+		)
 	}
 
 	flag.Parse()

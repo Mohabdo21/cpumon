@@ -138,14 +138,28 @@ func discoverHwmonTemps(hwmonPath string) []HwmonTemp {
 	return temps
 }
 
-func readCPUThermal(fr FileReader, cr CmdRunner, sensorsOK bool, hwmonTemps []HwmonTemp, coreFreqs map[int]string, coreUsage map[int]float64, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
+func readCPUThermal(
+	fr FileReader,
+	cr CmdRunner,
+	sensorsOK bool,
+	hwmonTemps []HwmonTemp,
+	coreFreqs map[int]string,
+	coreUsage map[int]float64,
+	coreBuf *[]CoreStatus,
+) ([]CoreStatus, error) {
 	if sensorsOK {
 		if out, err := readThermalFromSensors(cr, coreFreqs, coreUsage, coreBuf); err == nil {
 			return out, nil
 		}
 	}
 	if len(hwmonTemps) > 0 {
-		if out, err := readThermalFromHwmon(fr, hwmonTemps, coreFreqs, coreUsage, coreBuf); err == nil {
+		if out, err := readThermalFromHwmon(
+			fr,
+			hwmonTemps,
+			coreFreqs,
+			coreUsage,
+			coreBuf,
+		); err == nil {
 			return out, nil
 		}
 	}
@@ -171,7 +185,12 @@ func parseTempC(s string) float64 {
 	return v
 }
 
-func readThermalFromSensors(cr CmdRunner, coreFreqs map[int]string, coreUsage map[int]float64, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
+func readThermalFromSensors(
+	cr CmdRunner,
+	coreFreqs map[int]string,
+	coreUsage map[int]float64,
+	coreBuf *[]CoreStatus,
+) ([]CoreStatus, error) {
 	out, err := cr.Run("sensors")
 	if err != nil {
 		return nil, err
@@ -231,7 +250,13 @@ func readThermalFromSensors(cr CmdRunner, coreFreqs map[int]string, coreUsage ma
 	return cores, nil
 }
 
-func readThermalFromHwmon(fr FileReader, temps []HwmonTemp, coreFreqs map[int]string, coreUsage map[int]float64, coreBuf *[]CoreStatus) ([]CoreStatus, error) {
+func readThermalFromHwmon(
+	fr FileReader,
+	temps []HwmonTemp,
+	coreFreqs map[int]string,
+	coreUsage map[int]float64,
+	coreBuf *[]CoreStatus,
+) ([]CoreStatus, error) {
 	if len(temps) == 0 {
 		return nil, ErrNoThermalData
 	}
