@@ -19,6 +19,10 @@ type Monitor struct {
 	fanFiles    []string
 	thinkpadFan bool
 	throttleOK  bool
+	kernel      string
+	governor    string
+	energyBias  string
+	turboBoost  string
 	prevStat    CPUTimes
 	prevCore    map[int]CPUTimes
 	cpuCoreMap  map[int]int
@@ -42,6 +46,8 @@ func NewMonitor() (*Monitor, error) {
 	thinkpadFan := fileExists(thinkpadFanPath)
 	throttleOK := fileExists(cpuThrottlePath)
 
+	prevStat, prevCore := readProcStat(fr)
+
 	m := &Monitor{
 		fr:          fr,
 		cpuModel:    readCPUModel(fr),
@@ -51,8 +57,12 @@ func NewMonitor() (*Monitor, error) {
 		fanFiles:    fanFiles,
 		thinkpadFan: thinkpadFan,
 		throttleOK:  throttleOK,
-		prevStat:    readCPUStat(fr),
-		prevCore:    readPerCoreStat(fr),
+		kernel:      readOrNA(fr, kernelReleasePath),
+		governor:    readOrNA(fr, cpuGovernorPath),
+		energyBias:  readOrNA(fr, cpuEnergyBiasPath),
+		turboBoost:  readTurboBoost(fr),
+		prevStat:    prevStat,
+		prevCore:    prevCore,
 		cpuCoreMap:  discoverCPUCoreMap(fr),
 		coreFreqBuf: make(map[int]string, 32),
 		coreBuf:     make([]CoreStatus, 0, 32),
@@ -79,11 +89,9 @@ func NewMonitor() (*Monitor, error) {
 func (m *Monitor) collect() Metrics {
 	avgFreq := readFrequencies(m.fr, m.cpuFreqs, m.coreFreqBuf)
 
-	cur := readCPUStat(m.fr)
+	cur, curCore := readProcStat(m.fr)
 	usage := calcUsage(m.prevStat, cur)
 	m.prevStat = cur
-
-	curCore := readPerCoreStat(m.fr)
 	coreUsage := calcPerCoreUsage(m.prevCore, curCore, m.cpuCoreMap)
 	m.prevCore = curCore
 
@@ -102,12 +110,12 @@ func (m *Monitor) collect() Metrics {
 	return Metrics{
 		DeviceModel: m.deviceModel,
 		CPUModel:    m.cpuModel,
-		Kernel:      readOrNA(m.fr, kernelReleasePath),
+		Kernel:      m.kernel,
 		Uptime:      readUptime(m.fr),
 		LoadAvg:     readLoadAvg(m.fr),
-		Governor:    readOrNA(m.fr, cpuGovernorPath),
-		EnergyBias:  readOrNA(m.fr, cpuEnergyBiasPath),
-		TurboBoost:  readTurboBoost(m.fr),
+		Governor:    m.governor,
+		EnergyBias:  m.energyBias,
+		TurboBoost:  m.turboBoost,
 		AvgFreq:     avgFreq,
 		CPUUsage:    usage,
 		Cores:       cores,

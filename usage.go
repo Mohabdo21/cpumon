@@ -11,27 +11,50 @@ type CPUTimes struct {
 	Valid bool
 }
 
-func readCPUStat(fr FileReader) CPUTimes {
+func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
 	data, err := fr.Read(procStatPath)
 	if err != nil {
-		return CPUTimes{}
+		return CPUTimes{}, nil
 	}
 
-	line, _, _ := strings.Cut(data, "\n")
-	fields := strings.Fields(line)
-	if len(fields) < 5 || fields[0] != "cpu" {
-		return CPUTimes{}
-	}
+	var agg CPUTimes
+	cores := make(map[int]CPUTimes)
 
-	var total, idle uint64
-	for i := 1; i < len(fields); i++ {
-		v, _ := strconv.ParseUint(fields[i], 10, 64)
-		total += v
-		if i == 4 || i == 5 { // idle + iowait
-			idle += v
+	for line, rest := "", data; rest != ""; {
+		line, rest, _ = strings.Cut(rest, "\n")
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		if fields[0] == "cpu" {
+			var total, idle uint64
+			for i := 1; i < len(fields); i++ {
+				v, _ := strconv.ParseUint(fields[i], 10, 64)
+				total += v
+				if i == 4 || i == 5 {
+					idle += v
+				}
+			}
+			agg = CPUTimes{Idle: idle, Total: total, Valid: true}
+		} else if strings.HasPrefix(fields[0], "cpu") {
+			num, err := strconv.Atoi(fields[0][3:])
+			if err != nil {
+				continue
+			}
+			var total, idle uint64
+			for i := 1; i < len(fields); i++ {
+				v, _ := strconv.ParseUint(fields[i], 10, 64)
+				total += v
+				if i == 4 || i == 5 {
+					idle += v
+				}
+			}
+			cores[num] = CPUTimes{Idle: idle, Total: total, Valid: true}
 		}
 	}
-	return CPUTimes{Idle: idle, Total: total, Valid: true}
+
+	return agg, cores
 }
 
 func calcUsage(prev, cur CPUTimes) float64 {
@@ -43,38 +66,6 @@ func calcUsage(prev, cur CPUTimes) float64 {
 		return 0
 	}
 	return float64(dt-cur.Idle+prev.Idle) / float64(dt) * 100
-}
-
-func readPerCoreStat(fr FileReader) map[int]CPUTimes {
-	data, err := fr.Read(procStatPath)
-	if err != nil {
-		return nil
-	}
-
-	cores := make(map[int]CPUTimes)
-	for line, rest := "", data; rest != ""; {
-		line, rest, _ = strings.Cut(rest, "\n")
-		fields := strings.Fields(line)
-		if len(fields) < 5 || !strings.HasPrefix(fields[0], "cpu") || fields[0] == "cpu" {
-			continue
-		}
-
-		num, err := strconv.Atoi(fields[0][3:])
-		if err != nil {
-			continue
-		}
-
-		var total, idle uint64
-		for i := 1; i < len(fields); i++ {
-			v, _ := strconv.ParseUint(fields[i], 10, 64)
-			total += v
-			if i == 4 || i == 5 {
-				idle += v
-			}
-		}
-		cores[num] = CPUTimes{Idle: idle, Total: total, Valid: true}
-	}
-	return cores
 }
 
 func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int) map[int]float64 {
