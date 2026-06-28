@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -14,14 +12,12 @@ import (
 
 type Monitor struct {
 	fr          FileReader
-	cr          CmdRunner
 	cpuModel    string
 	deviceModel string
 	cpuFreqs    []CPUFreqInfo
 	hwmonTemps  []HwmonTemp
 	fanFiles    []string
 	thinkpadFan bool
-	sensorsOK   bool
 	throttleOK  bool
 	prevStat    CPUTimes
 	prevCore    map[int]CPUTimes
@@ -38,7 +34,6 @@ type Monitor struct {
 
 func NewMonitor() (*Monitor, error) {
 	fr := sysFileReader{}
-	cr := sysCmdRunner{}
 
 	hwmonPath := discoverHwmonCPU(fr)
 	cpuFreqs := discoverCPUTopology(fr)
@@ -47,26 +42,14 @@ func NewMonitor() (*Monitor, error) {
 	thinkpadFan := fileExists(thinkpadFanPath)
 	throttleOK := fileExists(cpuThrottlePath)
 
-	sensorsOK := false
-	if _, err := exec.LookPath("sensors"); err == nil {
-		if out, err := cr.Run("sensors"); err == nil && len(out) > 0 {
-			sensorsOK = strings.Contains(out, "Package id") ||
-				strings.Contains(out, "Core ") ||
-				strings.Contains(out, "Tctl:") ||
-				strings.Contains(out, "Tdie:")
-		}
-	}
-
 	m := &Monitor{
 		fr:          fr,
-		cr:          cr,
 		cpuModel:    readCPUModel(fr),
 		deviceModel: readDeviceModel(fr),
 		cpuFreqs:    cpuFreqs,
 		hwmonTemps:  hwmonTemps,
 		fanFiles:    fanFiles,
 		thinkpadFan: thinkpadFan,
-		sensorsOK:   sensorsOK,
 		throttleOK:  throttleOK,
 		prevStat:    readCPUStat(fr),
 		prevCore:    readPerCoreStat(fr),
@@ -83,7 +66,7 @@ func NewMonitor() (*Monitor, error) {
 	}
 
 	hasFreq := len(cpuFreqs) > 0
-	hasThermal := sensorsOK || len(hwmonTemps) > 0
+	hasThermal := len(hwmonTemps) > 0
 	hasFan := thinkpadFan || len(fanFiles) > 0
 
 	if !hasFreq && !hasThermal && !hasFan && !throttleOK {
@@ -106,8 +89,6 @@ func (m *Monitor) collect() Metrics {
 
 	cores, _ := readCPUThermal(
 		m.fr,
-		m.cr,
-		m.sensorsOK,
 		m.hwmonTemps,
 		m.coreFreqBuf,
 		coreUsage,
@@ -133,7 +114,6 @@ func (m *Monitor) collect() Metrics {
 		Throttle:    readThrottleInfo(m.fr, m.throttleOK),
 		FanStatus:   fanStatus,
 		Power:       power,
-		SensorsHint: !m.sensorsOK,
 		Stats:       m.stats,
 		Topology:    m.topology,
 	}

@@ -13,6 +13,7 @@ type winsize struct {
 	_   uint16
 }
 
+//nolint:gosec // Linux ioctl requires unsafe.Pointer
 func termWidth() int {
 	var ws winsize
 	_, _, errno := syscall.Syscall(
@@ -27,6 +28,7 @@ func termWidth() int {
 	return int(ws.Col)
 }
 
+//nolint:gosec // Linux ioctl requires unsafe.Pointer
 func enableRawMode() (orig syscall.Termios, err error) {
 	fd := uintptr(os.Stdin.Fd())
 	_, _, errno := syscall.Syscall(
@@ -54,6 +56,7 @@ func enableRawMode() (orig syscall.Termios, err error) {
 	return orig, nil
 }
 
+//nolint:gosec // Linux ioctl requires unsafe.Pointer
 func restoreTermMode(t syscall.Termios) {
 	fd := uintptr(os.Stdin.Fd())
 	_, _, _ = syscall.Syscall(

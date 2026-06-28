@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -12,9 +11,6 @@ import (
 
 var (
 	cpuNumRe  = regexp.MustCompile(`cpu(\d+)`)
-	packageRe = regexp.MustCompile(`^(Package id \d+):(\s+)(\S.*)`)
-	coreRe    = regexp.MustCompile(`^(Core\s+(\d+)):(\s+)(\S.*)`)
-	amdTctlRe = regexp.MustCompile(`^(Tctl|Tdie|Tccd\d*):(\s+)(\S.*)`)
 	coreNumRe = regexp.MustCompile(`Core\s*(\d+)`)
 )
 
@@ -73,16 +69,21 @@ func discoverCPUCoreMap(fr FileReader) map[int]int {
 
 func discoverHwmonCPU(fr FileReader) string {
 	paths, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
-	drivers := []string{"coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz"}
+	tiers := [][]string{
+		{"coretemp", "k10temp", "zenpower", "cpu_thermal"},
+		{"acpitz"},
+	}
 
-	for _, p := range paths {
-		name, err := fr.Read(filepath.Join(p, "name"))
-		if err != nil {
-			continue
-		}
-		for _, drv := range drivers {
-			if strings.Contains(strings.ToLower(name), drv) {
-				return p
+	for _, tier := range tiers {
+		for _, p := range paths {
+			name, err := fr.Read(filepath.Join(p, "name"))
+			if err != nil {
+				continue
+			}
+			for _, drv := range tier {
+				if strings.Contains(strings.ToLower(name), drv) {
+					return p
+				}
 			}
 		}
 	}
@@ -140,114 +141,21 @@ func discoverHwmonTemps(hwmonPath string) []HwmonTemp {
 
 func readCPUThermal(
 	fr FileReader,
-	cr CmdRunner,
-	sensorsOK bool,
 	hwmonTemps []HwmonTemp,
 	coreFreqs map[int]string,
 	coreUsage map[int]float64,
 	coreBuf *[]CoreStatus,
 ) ([]CoreStatus, error) {
-	if sensorsOK {
-		if out, err := readThermalFromSensors(cr, coreFreqs, coreUsage, coreBuf); err == nil {
-			return out, nil
-		}
-	}
 	if len(hwmonTemps) > 0 {
-		if out, err := readThermalFromHwmon(
+		return readThermalFromHwmon(
 			fr,
 			hwmonTemps,
 			coreFreqs,
 			coreUsage,
 			coreBuf,
-		); err == nil {
-			return out, nil
-		}
+		)
 	}
 	return nil, ErrNoThermalData
-}
-
-func splitTempLimit(s string) (string, string) {
-	if i := strings.IndexByte(s, '('); i > 0 {
-		return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i:])
-	}
-	return strings.TrimSpace(s), ""
-}
-
-func parseTempC(s string) float64 {
-	idx := strings.Index(s, "°")
-	if idx <= 0 {
-		return -1
-	}
-	v, err := strconv.ParseFloat(strings.TrimPrefix(s[:idx], "+"), 64)
-	if err != nil {
-		return -1
-	}
-	return v
-}
-
-func readThermalFromSensors(
-	cr CmdRunner,
-	coreFreqs map[int]string,
-	coreUsage map[int]float64,
-	coreBuf *[]CoreStatus,
-) ([]CoreStatus, error) {
-	out, err := cr.Run("sensors")
-	if err != nil {
-		return nil, err
-	}
-
-	cores := (*coreBuf)[:0]
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if m := packageRe.FindStringSubmatch(line); m != nil {
-			temp, limit := splitTempLimit(m[3])
-			cores = append(cores, CoreStatus{
-				Label:     m[1],
-				Temp:      temp,
-				Limit:     limit,
-				TempC:     parseTempC(m[3]),
-				Usage:     -1,
-				IsPackage: true,
-			})
-		} else if m := amdTctlRe.FindStringSubmatch(line); m != nil {
-			temp, limit := splitTempLimit(m[3])
-			cores = append(cores, CoreStatus{
-				Label:     m[1],
-				Temp:      temp,
-				Limit:     limit,
-				TempC:     parseTempC(m[3]),
-				Usage:     -1,
-				IsPackage: true,
-			})
-		} else if m := coreRe.FindStringSubmatch(line); m != nil {
-			coreNum, _ := strconv.Atoi(m[2])
-			freq := ""
-			if f, ok := coreFreqs[coreNum]; ok {
-				freq = f
-			}
-			usage := -1.0
-			if u, ok := coreUsage[coreNum]; ok {
-				usage = u
-			}
-			temp, limit := splitTempLimit(m[4])
-			cores = append(cores, CoreStatus{
-				Label: m[1],
-				Freq:  freq,
-				Usage: usage,
-				Temp:  temp,
-				Limit: limit,
-				TempC: parseTempC(m[4]),
-			})
-		}
-	}
-	*coreBuf = cores
-
-	if len(cores) == 0 {
-		return nil, ErrNoThermalData
-	}
-	return cores, nil
 }
 
 func readThermalFromHwmon(

@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -74,7 +74,6 @@ type Metrics struct {
 	Throttle    ThrottleInfo
 	FanStatus   string
 	Power       PowerReading
-	SensorsHint bool
 	Stats       SessionStats
 	Topology    CoreTopology
 }
@@ -105,28 +104,14 @@ type FileReader interface {
 	Read(path string) (string, error)
 }
 
-type CmdRunner interface {
-	Run(name string, args ...string) (string, error)
-}
-
 type sysFileReader struct{}
 
 func (sysFileReader) Read(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
-}
-
-type sysCmdRunner struct{}
-
-func (sysCmdRunner) Run(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
 }
 
 func fileExists(path string) bool {

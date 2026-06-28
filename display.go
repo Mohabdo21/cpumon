@@ -121,11 +121,6 @@ func display(m Metrics, interval time.Duration) {
 		b.WriteByte('\n')
 	}
 
-	if m.SensorsHint {
-		fmt.Fprintf(&b, "  %s%sHint:%s Install lm-sensors for better thermal data%s\n",
-			ansiDim, ansiYellow, ansiReset+ansiDim, ansiReset)
-	}
-
 	fmt.Fprintf(
 		&b,
 		"  %sRefreshing every %v... (q or Ctrl+C to exit)%s\n",
