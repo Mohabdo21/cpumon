@@ -3,6 +3,7 @@ BUILD_DIR = build
 AUR_REPO = ssh://aur@aur.archlinux.org/cpumon.git
 AUR_DIR = /tmp/cpumon-aur
 VERSION = $(shell grep 'const version' main.go | cut -d'"' -f2)
+GOAMD64 ?= v3
 
 .PHONY: build build-optimized run install clean lint aur-clone aur-update aur-publish
 
@@ -12,7 +13,11 @@ build:
 
 build-optimized:
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -gcflags="-l=4" -o $(BUILD_DIR)/$(BINARY) .
+	CGO_ENABLED=0 GOAMD64=$(GOAMD64) go build \
+		-trimpath \
+		-ldflags="-s -w" \
+		-buildmode=pie \
+		-o $(BUILD_DIR)/$(BINARY) .
 
 run: build
 	@$(BUILD_DIR)/$(BINARY)
