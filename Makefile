@@ -59,9 +59,8 @@ release:
 	echo "==> Pushing to GitHub"; \
 	git push origin main "v$(VERSION)"; \
 	echo ""; \
-	echo "==> Computing sha256sums for v$(VERSION)"; \
-	SHA=$$(curl -sL "https://github.com/Mohabdo21/cpumon/archive/v$(VERSION).tar.gz" | sha256sum | cut -d' ' -f1); \
-	sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" aur/PKGBUILD; \
+	echo "==> Setting sha256sums to SKIP (git source)"; \
+	sed -i "s/^sha256sums=.*/sha256sums=('SKIP')/" aur/PKGBUILD; \
 	git add aur/PKGBUILD; \
 	git commit -m "chore: update AUR PKGBUILD checksums for v$(VERSION)"; \
 	git push origin main; \
@@ -103,8 +102,12 @@ aur-update: aur-clone
 	fi
 	@echo "Updating sha256sums..."
 	@cd $(AUR_DIR) && \
-		SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
-		sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" PKGBUILD
+		if grep -q "^source=.*git+" PKGBUILD; then \
+			sed -i "s/^sha256sums=.*/sha256sums=('SKIP')/" PKGBUILD; \
+		else \
+			SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
+			sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" PKGBUILD; \
+		fi
 	@cd $(AUR_DIR) && makepkg --printsrcinfo > .SRCINFO
 	@echo "PKGBUILD and .SRCINFO updated for $(VERSION)"
 
