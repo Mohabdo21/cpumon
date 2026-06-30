@@ -9,7 +9,7 @@ license=('MIT')
 makedepends=('go')
 optdepends=('lm_sensors: improved thermal data via sensors')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/Mohabdo21/cpumon/archive/v$pkgver.tar.gz")
-sha256sums=('f1846866b0a7291b3d1c5e4da646142ff64bd7b5a722bafdf96a192a280ff969')
+sha256sums=('9fb02fcd180b5a485046271024661e5bf7a4cd867fdcb75aedb24a875ab6e3a4')
 
 build() {
 	cd "$pkgname-$pkgver"
