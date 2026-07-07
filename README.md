@@ -45,13 +45,6 @@ Requires root for some metrics like power consumption, set read/search file capa
 sudo setcap cap_dac_read_search=ep /bin/cpumon
 ```
 
-Install `lm-sensors` for better thermal data:
-
-```sh
-sudo pacman -S lm_sensors
-sudo sensors-detect
-```
-
 ## Supported Hardware
 
 - Intel (coretemp)
