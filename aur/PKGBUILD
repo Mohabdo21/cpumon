@@ -8,7 +8,7 @@ url='https://github.com/Mohabdo21/cpumon'
 license=('MIT')
 makedepends=('go' 'git')
 source=("$pkgname::git+https://github.com/Mohabdo21/cpumon.git#tag=v$pkgver")
-sha256sums=('8c9e3c4cb2d4dccf1f33e00b645adfe9b2ec265fc002e57ccef3d7afd5cedbc2')
+sha256sums=('14aa55eda01e4d71cec1fd0a1a3f28cfe05766f728d7f3d00aa5a2e42a86575e')
 
 build() {
 	cd "$pkgname"
