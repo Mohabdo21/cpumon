@@ -90,13 +90,7 @@ func display(m Metrics, interval time.Duration) {
 			title = fmt.Sprintf("CPU Status [%s]", label)
 		}
 		writeHeader(&b, title)
-		cols := 1
-		if width >= 120 {
-			cols = 3
-		} else if width >= 80 {
-			cols = 2
-		}
-		writeCoreGrid(&b, m.Cores, m.Stats, cols, m.Topology)
+		writeCoreGrid(&b, m.Cores, m.Stats, width, m.Topology)
 		b.WriteByte('\n')
 	}
 
@@ -173,7 +167,7 @@ func writeCoreGrid(
 	b *strings.Builder,
 	cores []CoreStatus,
 	stats SessionStats,
-	cols int,
+	width int,
 	topo CoreTopology,
 ) {
 	for _, c := range cores {
@@ -202,8 +196,8 @@ func writeCoreGrid(
 
 	if topo.Hybrid {
 		perf, eff := classifyCores(cores, topo)
-		writeCoreGroup(b, "P-Cores", perf, cols)
-		writeCoreGroup(b, "E-Cores", eff, cols)
+		writeCoreGroup(b, "P-Cores", perf, width)
+		writeCoreGroup(b, "E-Cores", eff, width)
 		return
 	}
 
@@ -217,18 +211,42 @@ func writeCoreGrid(
 		return
 	}
 
-	writeCoreRows(b, perCore, cols)
+	writeCoreRows(b, perCore, width)
 }
 
-func writeCoreGroup(b *strings.Builder, title string, cores []CoreStatus, cols int) {
+func writeCoreGroup(b *strings.Builder, title string, cores []CoreStatus, width int) {
 	if len(cores) == 0 {
 		return
 	}
 	fmt.Fprintf(b, "  %s%s%s%s\n", ansiDim, ansiCyan, title, ansiReset)
-	writeCoreRows(b, cores, cols)
+	writeCoreRows(b, cores, width)
 }
 
-func writeCoreRows(b *strings.Builder, cores []CoreStatus, cols int) {
+func coreEntryWidth(c CoreStatus) int {
+	freq := c.Freq
+	if freq == "" {
+		freq = "---"
+	}
+	usage := "  ---"
+	if c.Usage >= 0 {
+		usage = fmt.Sprintf("%4.0f%%", c.Usage)
+	}
+	w := 2 + 9 + 1 + len(freq) + 1 + len(usage) + 1 + 8
+	if c.CoreLimit != "" {
+		w += 1 + len(c.CoreLimit)
+	}
+	return w
+}
+
+func writeCoreRows(b *strings.Builder, cores []CoreStatus, width int) {
+	maxW := 0
+	for _, c := range cores {
+		if w := coreEntryWidth(c); w > maxW {
+			maxW = w
+		}
+	}
+	gap := 4
+	cols := min(max(1, (width-2)/(maxW+gap)), len(cores))
 	rows := (len(cores) + cols - 1) / cols
 	for r := range rows {
 		for c := range cols {
@@ -266,6 +284,9 @@ func writeCoreEntry(b *strings.Builder, c CoreStatus) {
 		ansiWhite, freq, ansiReset,
 		usage,
 		tc, c.Temp, ansiReset)
+	if c.CoreLimit != "" {
+		fmt.Fprintf(b, " %s%s%s", ansiDim, c.CoreLimit, ansiReset)
+	}
 }
 
 func writeThrottleField(b *strings.Builder, label, value string) {

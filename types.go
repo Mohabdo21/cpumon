@@ -96,6 +96,7 @@ type CoreStatus struct {
 	Usage     float64
 	Temp      string
 	Limit     string
+	CoreLimit string
 	TempC     float64
 	IsPackage bool
 }

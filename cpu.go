@@ -184,10 +184,23 @@ func readThermalFromHwmon(
 
 		temp := fmt.Sprintf("+%.1f°C", tempC)
 		limit := ""
-		if m, ok := readInt(fr, t.Crit); ok && m > 0 {
-			limit = fmt.Sprintf("(crit = +%.1f°C)", float64(m)/1000.0)
-		} else if m, ok := readInt(fr, t.Max); ok && m > 0 {
-			limit = fmt.Sprintf("(high = +%.1f°C)", float64(m)/1000.0)
+		coreLimit := ""
+		critM, critOK := readInt(fr, t.Crit)
+		if critOK && critM > 0 {
+			limit = fmt.Sprintf("(crit = +%.1f°C)", float64(critM)/1000.0)
+			coreLimit = fmt.Sprintf("C%.0f", float64(critM)/1000.0)
+		}
+		if maxM, ok := readInt(fr, t.Max); ok && maxM > 0 {
+			if critOK && critM > 0 {
+				coreLimit = fmt.Sprintf("H%.0f/C%.0f", float64(maxM)/1000.0, float64(critM)/1000.0)
+				limit = fmt.Sprintf(
+					"(high = +%.1f°C, crit = +%.1f°C)",
+					float64(maxM)/1000.0, float64(critM)/1000.0,
+				)
+			} else {
+				coreLimit = fmt.Sprintf("H%.0f", float64(maxM)/1000.0)
+				limit = fmt.Sprintf("(high = +%.1f°C)", float64(maxM)/1000.0)
+			}
 		}
 
 		isPackage := true
@@ -210,6 +223,7 @@ func readThermalFromHwmon(
 			Usage:     usage,
 			Temp:      temp,
 			Limit:     limit,
+			CoreLimit: coreLimit,
 			TempC:     tempC,
 			IsPackage: isPackage,
 		})
