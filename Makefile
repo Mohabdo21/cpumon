@@ -3,6 +3,7 @@ BUILD_DIR = build
 AUR_REPO = ssh://aur@aur.archlinux.org/cpumon.git
 AUR_DIR = /tmp/cpumon-aur
 VERSION = $(shell grep 'const version' main.go | cut -d'"' -f2)
+VER_CLEAN = $(VERSION:v=%)
 GOAMD64 ?= v3
 
 .PHONY: build build-optimized run install clean lint check release aur-clone aur-update aur-publish
@@ -58,7 +59,7 @@ aur-update: aur-clone
 	@cd $(AUR_DIR) && git pull
 	@CURRENT_VER=$$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
 	CURRENT_REL=$$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
-	NEW_VER=$${VERSION#v}; \
+	NEW_VER=$(VER_CLEAN); \
 	if [ "$$CURRENT_VER" != "$$NEW_VER" ]; then \
 		echo "Version changed: $$CURRENT_VER -> $$NEW_VER"; \
 		sed -i "s/^pkgver=.*/pkgver=$$NEW_VER/" $(AUR_DIR)/PKGBUILD; \
