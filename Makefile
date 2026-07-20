@@ -5,7 +5,7 @@ AUR_DIR = /tmp/cpumon-aur
 VERSION = $(shell grep 'const version' main.go | cut -d'"' -f2)
 GOAMD64 ?= v3
 
-.PHONY: build build-optimized run install clean lint release aur-clone aur-update aur-publish
+.PHONY: build build-optimized run install clean lint check release aur-clone aur-update aur-publish
 
 build:
 	@mkdir -p $(BUILD_DIR)
@@ -32,6 +32,13 @@ clean:
 lint:
 	go vet ./...
 	golangci-lint run
+
+check:
+	go fmt ./...
+	go fix ./...
+	go vet ./...
+	golangci-lint fmt
+	golangci-lint run --fix
 
 # --- Release ---
 

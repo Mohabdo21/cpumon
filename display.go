@@ -2,22 +2,34 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// ANSI escape codes
-const (
-	ansiReset  = "\033[0m"
-	ansiBold   = "\033[1m"
-	ansiDim    = "\033[2m"
-	ansiRed    = "\033[31m"
-	ansiGreen  = "\033[32m"
-	ansiYellow = "\033[33m"
-	ansiCyan   = "\033[36m"
-	ansiWhite  = "\033[97m"
+// ANSI escape codes — zeroed when NO_COLOR is set
+var (
+	ansiReset   = "\033[0m"
+	ansiBold    = "\033[1m"
+	ansiDim     = "\033[2m"
+	ansiRed     = "\033[31m"
+	ansiGreen   = "\033[32m"
+	ansiYellow  = "\033[33m"
+	ansiDefault = "\033[39m"
 )
+
+func init() {
+	if os.Getenv("NO_COLOR") != "" {
+		ansiReset = ""
+		ansiBold = ""
+		ansiDim = ""
+		ansiRed = ""
+		ansiGreen = ""
+		ansiYellow = ""
+		ansiDefault = ""
+	}
+}
 
 func display(m Metrics, interval time.Duration) {
 	width := termWidth()
@@ -67,7 +79,7 @@ func display(m Metrics, interval time.Duration) {
 			}
 		}
 		for _, z := range m.Power.Zones {
-			color := ansiWhite
+			color := ansiDefault
 			if z.Name == "Package" && z.Watts > 28 {
 				color = ansiRed
 			} else if z.Name == "Package" && z.Watts > 15 {
@@ -109,7 +121,7 @@ func display(m Metrics, interval time.Duration) {
 		writeHeader(&b, "Fan Status")
 		for line := range strings.SplitSeq(m.FanStatus, "\n") {
 			if line != "" {
-				fmt.Fprintf(&b, "  %s%s%s\n", ansiWhite, line, ansiReset)
+				fmt.Fprintf(&b, "  %s%s%s\n", ansiDefault, line, ansiReset)
 			}
 		}
 		b.WriteByte('\n')
@@ -127,7 +139,7 @@ func display(m Metrics, interval time.Duration) {
 }
 
 func writeHeader(b *strings.Builder, title string) {
-	fmt.Fprintf(b, "  %s%s-- %s --%s\n", ansiBold, ansiCyan, title, ansiReset)
+	fmt.Fprintf(b, "  %s-- %s --%s\n", ansiBold, title, ansiReset)
 }
 
 func writeField(b *strings.Builder, label, value string) {
@@ -137,7 +149,7 @@ func writeField(b *strings.Builder, label, value string) {
 		ansiDim,
 		label+":",
 		ansiReset,
-		ansiWhite,
+		ansiDefault,
 		value,
 		ansiReset,
 	)
@@ -218,7 +230,7 @@ func writeCoreGroup(b *strings.Builder, title string, cores []CoreStatus, width 
 	if len(cores) == 0 {
 		return
 	}
-	fmt.Fprintf(b, "  %s%s%s%s\n", ansiDim, ansiCyan, title, ansiReset)
+	fmt.Fprintf(b, "  %s%s%s\n", ansiDim, title, ansiReset)
 	writeCoreRows(b, cores, width)
 }
 
@@ -281,7 +293,7 @@ func writeCoreEntry(b *strings.Builder, c CoreStatus) {
 	}
 	fmt.Fprintf(b, "  %s%-9s%s %s%-10s%s %s %s%-8s%s",
 		ansiDim, c.Label+":", ansiReset,
-		ansiWhite, freq, ansiReset,
+		ansiDefault, freq, ansiReset,
 		usage,
 		tc, c.Temp, ansiReset)
 	if c.CoreLimit != "" {
@@ -290,7 +302,7 @@ func writeCoreEntry(b *strings.Builder, c CoreStatus) {
 }
 
 func writeThrottleField(b *strings.Builder, label, value string) {
-	color := ansiWhite
+	color := ansiDefault
 	if v, err := strconv.ParseInt(value, 10, 64); err == nil && v > 0 {
 		color = ansiRed
 	}
@@ -300,7 +312,7 @@ func writeThrottleField(b *strings.Builder, label, value string) {
 func tempColor(c float64) string {
 	switch {
 	case c < 0:
-		return ansiWhite
+		return ansiDefault
 	case c < 60:
 		return ansiGreen
 	case c < 80:
@@ -315,7 +327,7 @@ func printSessionSummary(s SessionStats) {
 	mins := int(duration.Minutes())
 	secs := int(duration.Seconds()) % 60
 
-	fmt.Printf("\n%s%s-- Session Summary --%s\n", ansiBold, ansiCyan, ansiReset)
+	fmt.Printf("\n%s-- Session Summary --%s\n", ansiBold, ansiReset)
 	fmt.Printf(
 		"  %s%-14s%s %dm%ds (%d samples)\n",
 		ansiDim,
