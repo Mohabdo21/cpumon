@@ -1,6 +1,6 @@
 # Maintainer: Mohannad Ahmed <mohannadabdo21@hotmail.com>
 pkgname=cpumon
-pkgver=0.2.4
+pkgver=0.2.5
 pkgrel=1
 pkgdesc='Real-time CPU monitoring for Linux - temperatures, frequencies, throttling, and fan status'
 arch=('x86_64' 'aarch64')
