@@ -58,7 +58,7 @@ aur-update: aur-clone
 	@cd $(AUR_DIR) && git pull
 	@CURRENT_VER=$$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
 	CURRENT_REL=$$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
-	NEW_VER=$(VERSION); \
+	NEW_VER=$${VERSION#v}; \
 	if [ "$$CURRENT_VER" != "$$NEW_VER" ]; then \
 		echo "Version changed: $$CURRENT_VER -> $$NEW_VER"; \
 		sed -i "s/^pkgver=.*/pkgver=$$NEW_VER/" $(AUR_DIR)/PKGBUILD; \
@@ -77,7 +77,7 @@ aur-update: aur-clone
 	fi
 	@echo "Updating sha256sums..."
 	@cd $(AUR_DIR) && \
-		SHA=$$(makepkg -g 2>/dev/null | grep -oP "'\K[^']+" | head -1) && \
+		SHA=$$(makepkg -g | grep -oP "'\K[^']+" | head -1) && \
 		sed -i "s/^sha256sums=.*/sha256sums=('$$SHA')/" PKGBUILD
 	@cd $(AUR_DIR) && makepkg --printsrcinfo > .SRCINFO
 	@echo "PKGBUILD and .SRCINFO updated for $(VERSION)"
