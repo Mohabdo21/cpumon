@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// ANSI escape codes — zeroed when NO_COLOR is set
+// ANSI escape codes - zeroed when NO_COLOR is set
 var (
 	ansiReset   = "\033[0m"
 	ansiBold    = "\033[1m"

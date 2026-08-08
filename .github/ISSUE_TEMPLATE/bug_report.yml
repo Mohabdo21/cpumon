@@ -1,0 +1,45 @@
+---
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: CPU model, motherboard, sensors (e.g. Intel coretemp, ThinkPad)
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Distro, kernel (`uname -r`), container/VM?
+  - type: input
+    id: version
+    attributes:
+      label: cpumon version
+      description: "`cpumon -v` output or commit SHA"
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro steps
+      description: Commands and flags used
+      placeholder: |
+        1. Run `cpumon -i 500ms`
+        2. ...
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Paste the terminal output or error
+  - type: textarea
+    id: related
+    attributes:
+      label: Related
+      description: Issue/PR links, if any
