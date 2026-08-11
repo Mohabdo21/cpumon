@@ -57,6 +57,7 @@ aur-clone:
 
 aur-update: aur-clone
 	@cd $(AUR_DIR) && git pull
+	@cp -f aur/PKGBUILD aur/cpumon.install $(AUR_DIR)/
 	@CURRENT_VER=$$(grep '^pkgver=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
 	CURRENT_REL=$$(grep '^pkgrel=' $(AUR_DIR)/PKGBUILD | cut -d= -f2); \
 	NEW_VER=$(VER_CLEAN); \
@@ -85,8 +86,8 @@ aur-update: aur-clone
 
 aur-publish: aur-update
 	@cd $(AUR_DIR) && \
-		if ! git diff --quiet PKGBUILD .SRCINFO; then \
-			git add PKGBUILD .SRCINFO && \
+		if ! git diff --quiet PKGBUILD .SRCINFO cpumon.install; then \
+			git add PKGBUILD .SRCINFO cpumon.install && \
 			git commit -m "Update to $(VERSION)" && \
 			git push && \
 			echo "Published cpumon to AUR"; \

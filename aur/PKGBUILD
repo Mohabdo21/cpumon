@@ -7,6 +7,8 @@ arch=('x86_64' 'aarch64')
 url='https://github.com/Mohabdo21/cpumon'
 license=('MIT')
 makedepends=('go' 'git')
+depends=('libcap')
+install=cpumon.install
 source=("$pkgname::git+https://github.com/Mohabdo21/cpumon.git#tag=v$pkgver")
 sha256sums=('47a3764e7ad5402b3a0d0fd89270d5e212f4c3078544dddb407c639bf8f6b6cb')
 
