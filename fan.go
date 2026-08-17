@@ -72,7 +72,7 @@ func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, 
 
 	for _, f := range fanFiles {
 		rpmVal, ok := readInt(fr, f)
-		if !ok {
+		if !ok || rpmVal <= 0 {
 			continue
 		}
 

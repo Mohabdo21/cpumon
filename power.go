@@ -109,7 +109,7 @@ func (s *raplState) Read(fr FileReader) PowerReading {
 
 		delta := cur - s.prevUJ[i]
 		if delta < 0 {
-			delta += 1<<32 - 1
+			delta += 1 << 32
 		}
 
 		watts := float64(delta) / 1e6 / dt
