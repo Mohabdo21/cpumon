@@ -3,7 +3,7 @@ BUILD_DIR = build
 AUR_REPO = ssh://aur@aur.archlinux.org/cpumon.git
 AUR_DIR = /tmp/cpumon-aur
 VERSION = $(shell grep 'const version' main.go | cut -d'"' -f2)
-VER_CLEAN = $(VERSION:v=%)
+VER_CLEAN = $(patsubst v%,%,$(VERSION))
 GOAMD64 ?= v3
 
 .PHONY: build build-optimized run install clean lint check release aur-clone aur-update aur-publish
