@@ -8,27 +8,52 @@ import (
 	"time"
 )
 
-const version = "0.2.6"
+const releaseVersion = "0.2.6"
+
+var (
+	version = releaseVersion
+	commit  = "unknown"
+)
+
+func canReadPower() bool {
+	f, err := os.Open("/sys/class/powercap/intel-rapl:0/energy_uj")
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	return true
+}
 
 func main() {
 	interval := flag.Duration("i", time.Second, "")
+	showVersion := flag.Bool("v", false, "")
 	showHelp := flag.Bool("h", false, "")
 
+	powerAvailable := canReadPower()
+
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "cpumon v%s - real-time CPU monitor\n\n", version)
-		fmt.Fprintln(os.Stderr, "Usage: cpumon [-i interval] [-h]")
+		fmt.Fprintf(os.Stderr, "cpumon v%s (%s) - real-time CPU monitor\n\n", version, commit)
+		fmt.Fprintln(os.Stderr, "Usage: cpumon [-i interval] [-v] [-h]")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Options:")
 		fmt.Fprintln(os.Stderr, "  -i duration   refresh interval (default 1s, min 100ms)")
+		fmt.Fprintln(os.Stderr, "  -v            print version and exit")
 		fmt.Fprintln(os.Stderr, "  -h            show this help")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(
-			os.Stderr,
-			"Note: run as root (or with cap_dac_read_search) for power consumption data.",
-		)
+		if !powerAvailable {
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(
+				os.Stderr,
+				"Note: run as root (or with cap_dac_read_search) for power consumption data.",
+			)
+		}
 	}
 
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("cpumon v%s (%s)\n", version, commit)
+		os.Exit(0)
+	}
 
 	if *showHelp {
 		flag.Usage()

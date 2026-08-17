@@ -2,21 +2,22 @@ BINARY = cpumon
 BUILD_DIR = build
 AUR_REPO = ssh://aur@aur.archlinux.org/cpumon.git
 AUR_DIR = /tmp/cpumon-aur
-VERSION = $(shell grep 'const version' main.go | cut -d'"' -f2)
+VERSION = $(shell grep 'const releaseVersion' main.go | cut -d'"' -f2)
 VER_CLEAN = $(patsubst v%,%,$(VERSION))
+COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GOAMD64 ?= v3
 
 .PHONY: build build-optimized run install clean lint check release aur-clone aur-update aur-publish
 
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY) .
+	go build -ldflags="-X main.version=$(VERSION) -X main.commit=$(COMMIT)" -o $(BUILD_DIR)/$(BINARY) .
 
 build-optimized:
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 GOAMD64=$(GOAMD64) go build \
 		-trimpath \
-		-ldflags="-s -w" \
+		-ldflags="-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)" \
 		-buildmode=pie \
 		-o $(BUILD_DIR)/$(BINARY) .
 

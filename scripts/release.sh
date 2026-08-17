@@ -112,11 +112,11 @@ generate_changelog() {
 bump_version() {
 	local ver_no_v="${VERSION#v}"
 	local current_ver
-	current_ver=$(grep 'const version' main.go | cut -d'"' -f2)
+	current_ver=$(grep 'const releaseVersion' main.go | cut -d'"' -f2)
 
 	info "Bumping version: $current_ver -> $ver_no_v"
 
-	sed -i "s/const version = \"$current_ver\"/const version = \"$ver_no_v\"/" main.go
+	sed -i "s/const releaseVersion = \"$current_ver\"/const releaseVersion = \"$ver_no_v\"/" main.go
 	sed -i "s/^pkgver=.*/pkgver=$ver_no_v/" aur/PKGBUILD
 	sed -i "s/^pkgrel=.*/pkgrel=1/" aur/PKGBUILD
 	sed -i "s/^pkgver =.*/pkgver = $ver_no_v/" aur/.SRCINFO
@@ -130,11 +130,13 @@ bump_version() {
 build_binaries() {
 	info "Building binaries..."
 	mkdir -p dist
+	local commit
+	commit=$(git rev-parse --short HEAD)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-		-trimpath -ldflags="-s -w" -buildmode=pie \
+		-trimpath -ldflags="-s -w -X main.commit=$commit" -buildmode=pie \
 		-o dist/cpumon-linux-amd64 .
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
-		-trimpath -ldflags="-s -w" -buildmode=pie \
+		-trimpath -ldflags="-s -w -X main.commit=$commit" -buildmode=pie \
 		-o dist/cpumon-linux-arm64 .
 	cd dist && sha256sum ./* >checksums.txt && cd ..
 	info "Binaries built in dist/:"

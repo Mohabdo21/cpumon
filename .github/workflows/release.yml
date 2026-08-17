@@ -1,3 +1,4 @@
+---
 name: Release
 
 on:
@@ -22,9 +23,12 @@ jobs:
 
       - name: Build binaries
         run: |
+          VERSION=$(grep 'const releaseVersion' main.go | cut -d'"' -f2)
+          COMMIT=$(git rev-parse --short HEAD)
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}"
           mkdir -p dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -buildmode=pie -o dist/cpumon-linux-amd64 .
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -buildmode=pie -o dist/cpumon-linux-arm64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="${LDFLAGS}" -buildmode=pie -o dist/cpumon-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="${LDFLAGS}" -buildmode=pie -o dist/cpumon-linux-arm64 .
           cd dist && sha256sum * > checksums.txt
 
       - name: Generate changelog
