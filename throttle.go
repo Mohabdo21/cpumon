@@ -20,14 +20,16 @@ func readThrottleInfo(fr FileReader, available bool) ThrottleInfo {
 		return ThrottleInfo{Available: false}
 	}
 
-	info := ThrottleInfo{Available: true}
+	info := ThrottleInfo{
+		Available: true,
 
-	info.PackageCount = readCount(fr, cpuThrottlePath)
-	info.PackageTotalTime = readDuration(fr, pkgThrottleTotal)
-	info.PackageMaxTime = readMs(fr, pkgThrottleMax)
-	info.CoreCount = readCount(fr, coreThrottleCount)
-	info.CoreTotalTime = readDuration(fr, coreThrottleTotal)
-	info.CoreMaxTime = readMs(fr, coreThrottleMax)
+		PackageCount:     readCount(fr, cpuThrottlePath),
+		PackageTotalTime: readDuration(fr, pkgThrottleTotal),
+		PackageMaxTime:   readMs(fr, pkgThrottleMax),
+		CoreCount:        readCount(fr, coreThrottleCount),
+		CoreTotalTime:    readDuration(fr, coreThrottleTotal),
+		CoreMaxTime:      readMs(fr, coreThrottleMax),
+	}
 
 	return info
 }
