@@ -10,7 +10,7 @@ makedepends=('go' 'git')
 depends=('libcap')
 install=cpumon.install
 source=("$pkgname::git+https://github.com/Mohabdo21/cpumon.git#tag=v$pkgver")
-sha256sums=('0d10eac5d93d22be9a3e0c136aaf270843809fb8416b163ee65fe927fcf40da6')
+sha256sums=('7ad49cf5768e3c38e5a00f3caa7dd298044e1093bcc31e15a8ff596b67f74531')
 
 build() {
 	cd "$pkgname"
