@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	defaultPowerWarn = 15.0
+	defaultPowerCrit = 28.0
+	envPowerWarn     = "CPUMON_POWER_WARN"
+	envPowerCrit     = "CPUMON_POWER_CRIT"
+)
+
 // ANSI escape codes - zeroed when NO_COLOR is set
 var (
 	ansiReset   = "\033[0m"
@@ -31,7 +38,22 @@ func init() {
 	}
 }
 
+func powerThresholds() (warn, crit float64) {
+	warn, crit = defaultPowerWarn, defaultPowerCrit
+	if v, err := strconv.ParseFloat(os.Getenv(envPowerWarn), 64); err == nil && v > 0 {
+		warn = v
+	}
+	if v, err := strconv.ParseFloat(os.Getenv(envPowerCrit), 64); err == nil && v > 0 {
+		crit = v
+	}
+	return
+}
+
 func display(m Metrics, interval time.Duration) {
+	fmt.Print(render(m, interval))
+}
+
+func render(m Metrics, interval time.Duration) string {
 	width := termWidth()
 
 	var b strings.Builder
@@ -39,93 +61,12 @@ func display(m Metrics, interval time.Duration) {
 
 	b.WriteString("\033[H\033[2J")
 
-	writeHeader(&b, "System Information")
-	writeField(&b, "Device", m.DeviceModel)
-	writeField(&b, "CPU", m.CPUModel)
-	writeField(&b, "Kernel", m.Kernel)
-	writeField(&b, "Uptime", m.Uptime)
-	if m.LoadAvg != "N/A" {
-		writeField(&b, "Load Avg", m.LoadAvg)
-	}
-	b.WriteByte('\n')
-
-	if m.Governor != "N/A" || m.EnergyBias != "N/A" || m.TurboBoost != "N/A" || m.AvgFreq != "N/A" {
-		writeHeader(&b, "CPU Performance")
-		if m.Governor != "N/A" {
-			writeField(&b, "Governor", m.Governor)
-		}
-		if m.EnergyBias != "N/A" {
-			writeField(&b, "Energy Bias", m.EnergyBias)
-		}
-		if m.TurboBoost != "N/A" {
-			writeField(&b, "Turbo Boost", m.TurboBoost)
-		}
-		if m.AvgFreq != "N/A" {
-			writeField(&b, "Avg Freq", m.AvgFreq)
-		}
-		if m.CPUUsage >= 0 {
-			barWidth := min(max((width-30)/2, 10), 40)
-			writeUsageBar(&b, m.CPUUsage, barWidth, m.Stats.PeakCPU)
-		}
-		b.WriteByte('\n')
-	}
-
-	if m.Power.Available && len(m.Power.Zones) > 0 {
-		writeHeader(&b, "Power Consumption")
-		var total float64
-		for _, z := range m.Power.Zones {
-			if z.Name == "Package" {
-				total += z.Watts
-			}
-		}
-		for _, z := range m.Power.Zones {
-			color := ansiDefault
-			if z.Name == "Package" && z.Watts > 28 {
-				color = ansiRed
-			} else if z.Name == "Package" && z.Watts > 15 {
-				color = ansiYellow
-			}
-			fmt.Fprintf(&b, "  %s%-14s%s %s%5.1f W%s\n",
-				ansiDim, z.Name+":", ansiReset, color, z.Watts, ansiReset)
-		}
-		if total == 0 {
-			for _, z := range m.Power.Zones {
-				total += z.Watts
-			}
-		}
-		b.WriteByte('\n')
-	}
-
-	if len(m.Cores) > 0 {
-		title := "CPU Status"
-		if label := coreClassLabel(m.Topology); label != "" {
-			title = fmt.Sprintf("CPU Status [%s]", label)
-		}
-		writeHeader(&b, title)
-		writeCoreGrid(&b, m.Cores, m.Stats, width, m.Topology)
-		b.WriteByte('\n')
-	}
-
-	if m.Throttle.Available {
-		writeHeader(&b, "Thermal Throttling")
-		writeThrottleField(&b, "Pkg Events", m.Throttle.PackageCount)
-		writeThrottleField(&b, "Pkg Total Time", m.Throttle.PackageTotalTime)
-		writeThrottleField(&b, "Pkg Max Event", m.Throttle.PackageMaxTime)
-		writeThrottleField(&b, "Core Events", m.Throttle.CoreCount)
-		writeThrottleField(&b, "Core Total Time", m.Throttle.CoreTotalTime)
-		writeThrottleField(&b, "Core Max Event", m.Throttle.CoreMaxTime)
-		b.WriteByte('\n')
-	}
-
-	if m.FanStatus != "" {
-		writeHeader(&b, "Fan Status")
-		for line := range strings.SplitSeq(m.FanStatus, "\n") {
-			if line != "" {
-				fmt.Fprintf(&b, "  %s%s%s\n", ansiDefault, line, ansiReset)
-			}
-		}
-		b.WriteByte('\n')
-	}
+	writeSystemInfo(&b, m)
+	writeCPUPerformance(&b, m, width)
+	writePower(&b, m)
+	writeCPUStatus(&b, m, width)
+	writeThrottle(&b, m.Throttle)
+	writeFan(&b, m.FanStatus)
 
 	fmt.Fprintf(
 		&b,
@@ -135,7 +76,113 @@ func display(m Metrics, interval time.Duration) {
 		ansiReset,
 	)
 
-	fmt.Print(b.String())
+	return b.String()
+}
+
+func writeSystemInfo(b *strings.Builder, m Metrics) {
+	writeHeader(b, "System Information")
+	writeField(b, "Device", m.DeviceModel)
+	writeField(b, "CPU", m.CPUModel)
+	writeField(b, "Kernel", m.Kernel)
+	writeField(b, "Uptime", m.Uptime)
+	if m.LoadAvg != "N/A" {
+		writeField(b, "Load Avg", m.LoadAvg)
+	}
+	b.WriteByte('\n')
+}
+
+func writeCPUPerformance(b *strings.Builder, m Metrics, width int) {
+	if m.Governor == "N/A" && m.EnergyBias == "N/A" && m.TurboBoost == "N/A" && m.AvgFreq == "N/A" {
+		return
+	}
+	writeHeader(b, "CPU Performance")
+	if m.Governor != "N/A" {
+		writeField(b, "Governor", m.Governor)
+	}
+	if m.EnergyBias != "N/A" {
+		writeField(b, "Energy Bias", m.EnergyBias)
+	}
+	if m.TurboBoost != "N/A" {
+		writeField(b, "Turbo Boost", m.TurboBoost)
+	}
+	if m.AvgFreq != "N/A" {
+		writeField(b, "Avg Freq", m.AvgFreq)
+	}
+	if m.CPUUsage >= 0 {
+		barWidth := min(max((width-30)/2, 10), 40)
+		writeUsageBar(b, m.CPUUsage, barWidth, m.Stats.PeakCPU)
+	}
+	b.WriteByte('\n')
+}
+
+func writePower(b *strings.Builder, m Metrics) {
+	if !m.Power.Available || len(m.Power.Zones) == 0 {
+		return
+	}
+	writeHeader(b, "Power Consumption")
+	warn, crit := powerThresholds()
+	var total float64
+	for _, z := range m.Power.Zones {
+		if z.Name == "Package" {
+			total += z.Watts
+		}
+	}
+	for _, z := range m.Power.Zones {
+		color := ansiDefault
+		if z.Name == "Package" && z.Watts > crit {
+			color = ansiRed
+		} else if z.Name == "Package" && z.Watts > warn {
+			color = ansiYellow
+		}
+		fmt.Fprintf(b, "  %s%-14s%s %s%5.1f W%s\n",
+			ansiDim, z.Name+":", ansiReset, color, z.Watts, ansiReset)
+	}
+	if total == 0 {
+		for _, z := range m.Power.Zones {
+			total += z.Watts
+		}
+	}
+	b.WriteByte('\n')
+}
+
+func writeCPUStatus(b *strings.Builder, m Metrics, width int) {
+	if len(m.Cores) == 0 {
+		return
+	}
+	title := "CPU Status"
+	if label := coreClassLabel(m.Topology); label != "" {
+		title = fmt.Sprintf("CPU Status [%s]", label)
+	}
+	writeHeader(b, title)
+	writeCoreGrid(b, m.Cores, m.Stats, width, m.Topology)
+	b.WriteByte('\n')
+}
+
+func writeThrottle(b *strings.Builder, t ThrottleInfo) {
+	if !t.Available {
+		return
+	}
+	writeHeader(b, "Thermal Throttling")
+	writeThrottleField(b, "Pkg Events", t.PackageCount)
+	writeThrottleField(b, "Pkg Total Time", t.PackageTotalTime)
+	writeThrottleField(b, "Pkg Max Event", t.PackageMaxTime)
+	writeThrottleField(b, "Core Events", t.CoreCount)
+	writeThrottleField(b, "Core Total Time", t.CoreTotalTime)
+	writeThrottleField(b, "Core Max Event", t.CoreMaxTime)
+	b.WriteByte('\n')
+}
+
+func writeFan(b *strings.Builder, fan string) {
+	if fan == "" {
+		return
+	}
+	writeHeader(b, "Fan Status")
+	for line := range strings.SplitSeq(fan, "\n") {
+		if line != "" {
+			fmt.Fprintf(b, "  %s%s%s\n", ansiDefault, line, ansiReset)
+		}
+	}
+	b.WriteByte('\n')
 }
 
 func writeHeader(b *strings.Builder, title string) {

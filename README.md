@@ -45,6 +45,21 @@ Requires root for some metrics like power consumption, set read/search file capa
 sudo setcap cap_dac_read_search=ep /bin/cpumon
 ```
 
+## Configuration
+
+Power threshold colors are configurable via env vars (defaults shown):
+
+| Env var             | Default | Description                           |
+| ------------------- | ------- | ------------------------------------- |
+| `CPUMON_POWER_WARN` | `15`    | Power warning threshold in W (yellow) |
+| `CPUMON_POWER_CRIT` | `28`    | Power critical threshold in W (red)   |
+
+Example:
+
+```sh
+CPUMON_POWER_WARN=50 CPUMON_POWER_CRIT=80 cpumon
+```
+
 ## Supported Hardware
 
 - Intel (coretemp)

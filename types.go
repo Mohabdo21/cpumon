@@ -84,10 +84,10 @@ type CPUFreqInfo struct {
 }
 
 type HwmonTemp struct {
-	Input string
-	Label string
-	Crit  string
-	Max   string
+	Input     string
+	LabelName string
+	Crit      string
+	Max       string
 }
 
 type CoreStatus struct {

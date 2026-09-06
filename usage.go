@@ -11,6 +11,17 @@ type CPUTimes struct {
 	Valid bool
 }
 
+func parseProcStatFields(fields []string) (idle, total uint64) {
+	for i := 1; i < len(fields); i++ {
+		v, _ := strconv.ParseUint(fields[i], 10, 64)
+		total += v
+		if i == 4 || i == 5 {
+			idle += v
+		}
+	}
+	return
+}
+
 func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
 	data, err := fr.Read(procStatPath)
 	if err != nil {
@@ -28,28 +39,14 @@ func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
 		}
 
 		if fields[0] == "cpu" {
-			var total, idle uint64
-			for i := 1; i < len(fields); i++ {
-				v, _ := strconv.ParseUint(fields[i], 10, 64)
-				total += v
-				if i == 4 || i == 5 {
-					idle += v
-				}
-			}
+			idle, total := parseProcStatFields(fields)
 			agg = CPUTimes{Idle: idle, Total: total, Valid: true}
 		} else if strings.HasPrefix(fields[0], "cpu") {
 			num, err := strconv.Atoi(fields[0][3:])
 			if err != nil {
 				continue
 			}
-			var total, idle uint64
-			for i := 1; i < len(fields); i++ {
-				v, _ := strconv.ParseUint(fields[i], 10, 64)
-				total += v
-				if i == 4 || i == 5 {
-					idle += v
-				}
-			}
+			idle, total := parseProcStatFields(fields)
 			cores[num] = CPUTimes{Idle: idle, Total: total, Valid: true}
 		}
 	}
@@ -61,11 +58,17 @@ func calcUsage(prev, cur CPUTimes) float64 {
 	if !prev.Valid || !cur.Valid {
 		return -1
 	}
+	// Counters must be monotonic; a decrease (e.g. iowait dropping or CPUs
+	// going offline at suspend) would otherwise underflow the unsigned delta
+	// and yield a bogus percentage. Treat it as no data.
+	if cur.Total < prev.Total || cur.Idle < prev.Idle {
+		return -1
+	}
 	dt := cur.Total - prev.Total
 	if dt == 0 {
 		return 0
 	}
-	return float64(dt-cur.Idle+prev.Idle) / float64(dt) * 100
+	return float64(dt-(cur.Idle-prev.Idle)) / float64(dt) * 100
 }
 
 func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int) map[int]float64 {
@@ -80,6 +83,12 @@ func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int) map[int
 	for cpu, c := range cur {
 		p, ok := prev[cpu]
 		if !ok || !p.Valid || !c.Valid {
+			continue
+		}
+
+		// Skip non-monotonic deltas (iowait decrease, CPU offline) so the
+		// unsigned subtraction below cannot underflow into a bogus usage.
+		if c.Total < p.Total || c.Idle < p.Idle {
 			continue
 		}
 

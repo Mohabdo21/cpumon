@@ -41,7 +41,7 @@ func NewMonitor() (*Monitor, error) {
 
 	hwmonPath := discoverHwmonCPU(fr)
 	cpuFreqs := discoverCPUTopology(fr)
-	hwmonTemps := discoverHwmonTemps(hwmonPath)
+	hwmonTemps := discoverHwmonTemps(fr, hwmonPath)
 	fanFiles := discoverFanFiles()
 	thinkpadFan := fileExists(thinkpadFanPath)
 	throttleOK := fileExists(cpuThrottlePath)
@@ -170,9 +170,8 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
+	stopQuit := watchQuit(ctx, cancel)
+	defer stopQuit()
 
 	winCh := make(chan os.Signal, 1)
 	signal.Notify(winCh, syscall.SIGWINCH)
@@ -182,29 +181,6 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	if rawErr == nil {
 		defer restoreTermMode(orig)
 	}
-
-	keyCh := make(chan byte, 1)
-	var wg sync.WaitGroup
-	wg.Go(func() {
-		select {
-		case <-sigCh:
-			cancel()
-		case <-ctx.Done():
-		}
-	})
-	go func() {
-		var buf [1]byte
-		for {
-			n, err := os.Stdin.Read(buf[:])
-			if n == 1 && (buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 0x03) {
-				keyCh <- buf[0]
-				return
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
 
 	fmt.Print("\033[?1049h")
 	defer func() { printSessionSummary(m.stats) }()
@@ -219,11 +195,6 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	for {
 		select {
 		case <-ctx.Done():
-			wg.Wait()
-			return nil
-		case <-keyCh:
-			cancel()
-			wg.Wait()
 			return nil
 		case <-ticker.C:
 			last = m.collect()
@@ -231,5 +202,43 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 		case <-winCh:
 			display(last, interval)
 		}
+	}
+}
+
+// watchQuit cancels ctx on SIGINT/SIGTERM or a quit key (q/Q/Ctrl+C) on
+// stdin. Returns a func that stops the watchers.
+func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	keyCh := make(chan byte, 1)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		select {
+		case <-sigCh:
+			cancel()
+		case <-keyCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	})
+	wg.Go(func() {
+		var buf [1]byte
+		for {
+			n, err := os.Stdin.Read(buf[:])
+			if n == 1 && (buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 0x03) {
+				keyCh <- buf[0]
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	})
+
+	return func() {
+		signal.Stop(sigCh)
+		_ = os.Stdin.Close()
+		wg.Wait()
 	}
 }

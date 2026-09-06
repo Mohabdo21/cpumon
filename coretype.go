@@ -33,6 +33,43 @@ func discoverCoreClasses(fr FileReader, coreMap map[int]int) CoreTopology {
 	return topo
 }
 
+func classifyByThreshold(
+	values map[int]int64,
+	minSpread int64,
+	topo *CoreTopology,
+	vendor string,
+) bool {
+	if len(values) < 2 {
+		return false
+	}
+
+	var lo, hi int64
+	for _, v := range values {
+		if lo == 0 || v < lo {
+			lo = v
+		}
+		if v > hi {
+			hi = v
+		}
+	}
+
+	if hi-lo < minSpread {
+		return false
+	}
+
+	mid := (lo + hi) / 2
+	for id, v := range values {
+		if v >= mid {
+			topo.Classes[id] = CoreClassPerformance
+		} else {
+			topo.Classes[id] = CoreClassEfficiency
+		}
+	}
+	topo.Hybrid = true
+	topo.Vendor = vendor
+	return true
+}
+
 func detectIntelHybrid(fr FileReader, coreMap map[int]int, topo *CoreTopology) bool {
 	baseFreqs := make(map[int]int64)
 	seen := make(map[int]bool)
@@ -49,35 +86,7 @@ func detectIntelHybrid(fr FileReader, coreMap map[int]int, topo *CoreTopology) b
 		}
 	}
 
-	if len(baseFreqs) < 2 {
-		return false
-	}
-
-	var lo, hi int64
-	for _, f := range baseFreqs {
-		if lo == 0 || f < lo {
-			lo = f
-		}
-		if f > hi {
-			hi = f
-		}
-	}
-
-	if hi-lo < 200000 {
-		return false
-	}
-
-	mid := (lo + hi) / 2
-	for id, f := range baseFreqs {
-		if f >= mid {
-			topo.Classes[id] = CoreClassPerformance
-		} else {
-			topo.Classes[id] = CoreClassEfficiency
-		}
-	}
-	topo.Hybrid = true
-	topo.Vendor = "Intel"
-	return true
+	return classifyByThreshold(baseFreqs, 200000, topo, "Intel")
 }
 
 func detectAMDPreferred(fr FileReader, coreMap map[int]int, topo *CoreTopology) bool {
@@ -106,35 +115,7 @@ func detectAMDPreferred(fr FileReader, coreMap map[int]int, topo *CoreTopology) 
 		}
 	}
 
-	if len(rankings) < 2 {
-		return false
-	}
-
-	var lo, hi int64
-	for _, r := range rankings {
-		if lo == 0 || r < lo {
-			lo = r
-		}
-		if r > hi {
-			hi = r
-		}
-	}
-
-	if hi-lo < 10 {
-		return false
-	}
-
-	mid := (lo + hi) / 2
-	for id, r := range rankings {
-		if r >= mid {
-			topo.Classes[id] = CoreClassPerformance
-		} else {
-			topo.Classes[id] = CoreClassEfficiency
-		}
-	}
-	topo.Hybrid = true
-	topo.Vendor = "AMD"
-	return true
+	return classifyByThreshold(rankings, 10, topo, "AMD")
 }
 
 func classifyCores(cores []CoreStatus, topo CoreTopology) (perf, eff []CoreStatus) {

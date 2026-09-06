@@ -7,7 +7,7 @@ VER_CLEAN = $(patsubst v%,%,$(VERSION))
 COMMIT = $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 GOAMD64 ?= v3
 
-.PHONY: build build-optimized run install clean lint check release aur-clone aur-update aur-publish
+.PHONY: build build-optimized run install clean lint check test release aur-clone aur-update aur-publish
 
 build:
 	@mkdir -p $(BUILD_DIR)
@@ -35,10 +35,14 @@ lint:
 	go vet ./...
 	golangci-lint run
 
+test:
+	go test ./...
+
 check:
 	go fmt ./...
 	go fix ./...
 	go vet ./...
+	go test ./...
 	golangci-lint fmt
 	golangci-lint run --fix
 
