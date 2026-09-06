@@ -170,9 +170,8 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
+	stopQuit := watchQuit(ctx, cancel)
+	defer stopQuit()
 
 	winCh := make(chan os.Signal, 1)
 	signal.Notify(winCh, syscall.SIGWINCH)
@@ -183,11 +182,42 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 		defer restoreTermMode(orig)
 	}
 
+	fmt.Print("\033[?1049h")
+	defer func() { printSessionSummary(m.stats) }()
+	defer fmt.Print("\033[?1049l")
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	last := m.collect()
+	display(last, interval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			last = m.collect()
+			display(last, interval)
+		case <-winCh:
+			display(last, interval)
+		}
+	}
+}
+
+// watchQuit cancels ctx on SIGINT/SIGTERM or a quit key (q/Q/Ctrl+C) on
+// stdin. Returns a func that stops the watchers.
+func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
 	keyCh := make(chan byte, 1)
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		select {
 		case <-sigCh:
+			cancel()
+		case <-keyCh:
 			cancel()
 		case <-ctx.Done():
 		}
@@ -206,30 +236,8 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 		}
 	}()
 
-	fmt.Print("\033[?1049h")
-	defer func() { printSessionSummary(m.stats) }()
-	defer fmt.Print("\033[?1049l")
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	last := m.collect()
-	display(last, interval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			wg.Wait()
-			return nil
-		case <-keyCh:
-			cancel()
-			wg.Wait()
-			return nil
-		case <-ticker.C:
-			last = m.collect()
-			display(last, interval)
-		case <-winCh:
-			display(last, interval)
-		}
+	return func() {
+		signal.Stop(sigCh)
+		wg.Wait()
 	}
 }
