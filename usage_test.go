@@ -123,6 +123,18 @@ func TestCalcUsage(t *testing.T) {
 			cur:  CPUTimes{Idle: 50, Total: 100, Valid: true},
 			want: 0,
 		},
+		{
+			name: "total decrease treated as no data",
+			prev: CPUTimes{Idle: 50, Total: 200, Valid: true},
+			cur:  CPUTimes{Idle: 60, Total: 100, Valid: true},
+			want: -1,
+		},
+		{
+			name: "idle decrease treated as no data",
+			prev: CPUTimes{Idle: 50, Total: 100, Valid: true},
+			cur:  CPUTimes{Idle: 40, Total: 200, Valid: true},
+			want: -1,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -183,6 +195,32 @@ func TestCalcPerCoreUsage(t *testing.T) {
 			prev: nil,
 			cur:  map[int]CPUTimes{},
 			want: nil,
+		},
+		{
+			name: "total decrease skipped",
+			prev: map[int]CPUTimes{
+				0: {Idle: 50, Total: 200, Valid: true},
+				1: {Idle: 30, Total: 100, Valid: true},
+			},
+			cur: map[int]CPUTimes{
+				0: {Idle: 60, Total: 100, Valid: true}, // total dropped -> skip cpu0
+				1: {Idle: 40, Total: 200, Valid: true},
+			},
+			cpuToCore: map[int]int{0: 0, 1: 1},
+			want:      map[int]float64{1: 90},
+		},
+		{
+			name: "idle decrease skipped",
+			prev: map[int]CPUTimes{
+				0: {Idle: 50, Total: 100, Valid: true},
+				1: {Idle: 30, Total: 100, Valid: true},
+			},
+			cur: map[int]CPUTimes{
+				0: {Idle: 40, Total: 200, Valid: true}, // idle dropped -> skip cpu0
+				1: {Idle: 40, Total: 200, Valid: true},
+			},
+			cpuToCore: map[int]int{0: 0, 1: 1},
+			want:      map[int]float64{1: 90},
 		},
 	}
 	for _, tt := range tests {

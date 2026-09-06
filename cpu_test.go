@@ -103,6 +103,43 @@ func TestReadThermalFromHwmon(t *testing.T) {
 			},
 		},
 		{
+			name: "limit when only max present",
+			files: map[string]string{
+				"t/input": "50000",
+				"t/label": "Tctl",
+				"t/max":   "85000",
+			},
+			temps:     []HwmonTemp{{Input: "t/input", Label: "t/label", Max: "t/max"}},
+			wantCores: 1,
+			check: func(t *testing.T, cores []CoreStatus) {
+				c := cores[0]
+				if c.Limit != "(high = +85.0°C)" {
+					t.Errorf("Limit = %q, want (high = +85.0°C)", c.Limit)
+				}
+				if c.CoreLimit != "H85" {
+					t.Errorf("CoreLimit = %q, want H85", c.CoreLimit)
+				}
+			},
+		},
+		{
+			name: "no limit when neither crit nor max present",
+			files: map[string]string{
+				"t/input": "50000",
+				"t/label": "Tctl",
+			},
+			temps:     []HwmonTemp{{Input: "t/input", Label: "t/label"}},
+			wantCores: 1,
+			check: func(t *testing.T, cores []CoreStatus) {
+				c := cores[0]
+				if c.Limit != "" {
+					t.Errorf("Limit = %q, want empty", c.Limit)
+				}
+				if c.CoreLimit != "" {
+					t.Errorf("CoreLimit = %q, want empty", c.CoreLimit)
+				}
+			},
+		},
+		{
 			name:  "unreadable input skipped",
 			files: base,
 			errs:  map[string]error{"t/input": errors.New("denied")},
