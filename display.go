@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	defaultPowerWarn = 15.0
+	defaultPowerCrit = 28.0
+	envPowerWarn     = "CPUMON_POWER_WARN"
+	envPowerCrit     = "CPUMON_POWER_CRIT"
+)
+
 // ANSI escape codes - zeroed when NO_COLOR is set
 var (
 	ansiReset   = "\033[0m"
@@ -29,6 +36,17 @@ func init() {
 		ansiYellow = ""
 		ansiDefault = ""
 	}
+}
+
+func powerThresholds() (warn, crit float64) {
+	warn, crit = defaultPowerWarn, defaultPowerCrit
+	if v, err := strconv.ParseFloat(os.Getenv(envPowerWarn), 64); err == nil && v > 0 {
+		warn = v
+	}
+	if v, err := strconv.ParseFloat(os.Getenv(envPowerCrit), 64); err == nil && v > 0 {
+		crit = v
+	}
+	return
 }
 
 func display(m Metrics, interval time.Duration) {
@@ -102,6 +120,7 @@ func writePower(b *strings.Builder, m Metrics) {
 		return
 	}
 	writeHeader(b, "Power Consumption")
+	warn, crit := powerThresholds()
 	var total float64
 	for _, z := range m.Power.Zones {
 		if z.Name == "Package" {
@@ -110,9 +129,9 @@ func writePower(b *strings.Builder, m Metrics) {
 	}
 	for _, z := range m.Power.Zones {
 		color := ansiDefault
-		if z.Name == "Package" && z.Watts > 28 {
+		if z.Name == "Package" && z.Watts > crit {
 			color = ansiRed
-		} else if z.Name == "Package" && z.Watts > 15 {
+		} else if z.Name == "Package" && z.Watts > warn {
 			color = ansiYellow
 		}
 		fmt.Fprintf(b, "  %s%-14s%s %s%5.1f W%s\n",

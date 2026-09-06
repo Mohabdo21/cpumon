@@ -16,36 +16,36 @@ var (
 )
 
 func canReadPower() bool {
-	f, err := os.Open("/sys/class/powercap/intel-rapl:0/energy_uj")
-	if err != nil {
-		return false
-	}
-	_ = f.Close()
-	return true
+	return len(discoverRAPL(sysFileReader{})) > 0
 }
 
 func main() {
-	interval := flag.Duration("i", time.Second, "")
-	showVersion := flag.Bool("v", false, "")
-	showHelp := flag.Bool("h", false, "")
-
-	powerAvailable := canReadPower()
+	interval := flag.Duration("i", time.Second, "refresh interval (default 1s, min 100ms)")
+	showVersion := flag.Bool("V", false, "print version and exit")
+	showHelp := flag.Bool("h", false, "show help")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "cpumon v%s (%s) - real-time CPU monitor\n\n", version, commit)
-		fmt.Fprintln(os.Stderr, "Usage: cpumon [-i interval] [-v] [-h]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Options:")
-		fmt.Fprintln(os.Stderr, "  -i duration   refresh interval (default 1s, min 100ms)")
-		fmt.Fprintln(os.Stderr, "  -v            print version and exit")
-		fmt.Fprintln(os.Stderr, "  -h            show this help")
-		if !powerAvailable {
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(
-				os.Stderr,
-				"Note: run as root (or with cap_dac_read_search) for power consumption data.",
-			)
+		powerNote := ""
+		if !canReadPower() {
+			powerNote = "\nNote: run as root (or with cap_dac_read_search) for power consumption data.\n"
 		}
+		fmt.Fprintf(
+			os.Stderr,
+			"cpumon v%s (%s) - real-time CPU monitor\n\n"+
+				"Usage: cpumon [-i interval] [-V] [-h]\n\n"+
+				"Options:\n"+
+				"  -i duration   refresh interval (default 1s, min 100ms)\n"+
+				"  -V            print version and exit\n"+
+				"  -h            show this help\n\n"+
+				"Environment:\n"+
+				"  %-16s power warning threshold in W (default %.0f)\n"+
+				"  %-16s power critical threshold in W (default %.0f)\n"+
+				"%s",
+			version, commit,
+			envPowerWarn, defaultPowerWarn,
+			envPowerCrit, defaultPowerCrit,
+			powerNote,
+		)
 	}
 
 	flag.Parse()

@@ -11,6 +11,17 @@ type CPUTimes struct {
 	Valid bool
 }
 
+func parseProcStatFields(fields []string) (idle, total uint64) {
+	for i := 1; i < len(fields); i++ {
+		v, _ := strconv.ParseUint(fields[i], 10, 64)
+		total += v
+		if i == 4 || i == 5 {
+			idle += v
+		}
+	}
+	return
+}
+
 func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
 	data, err := fr.Read(procStatPath)
 	if err != nil {
@@ -28,28 +39,14 @@ func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
 		}
 
 		if fields[0] == "cpu" {
-			var total, idle uint64
-			for i := 1; i < len(fields); i++ {
-				v, _ := strconv.ParseUint(fields[i], 10, 64)
-				total += v
-				if i == 4 || i == 5 {
-					idle += v
-				}
-			}
+			idle, total := parseProcStatFields(fields)
 			agg = CPUTimes{Idle: idle, Total: total, Valid: true}
 		} else if strings.HasPrefix(fields[0], "cpu") {
 			num, err := strconv.Atoi(fields[0][3:])
 			if err != nil {
 				continue
 			}
-			var total, idle uint64
-			for i := 1; i < len(fields); i++ {
-				v, _ := strconv.ParseUint(fields[i], 10, 64)
-				total += v
-				if i == 4 || i == 5 {
-					idle += v
-				}
-			}
+			idle, total := parseProcStatFields(fields)
 			cores[num] = CPUTimes{Idle: idle, Total: total, Valid: true}
 		}
 	}
