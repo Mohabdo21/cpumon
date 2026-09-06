@@ -222,7 +222,7 @@ func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
 		case <-ctx.Done():
 		}
 	})
-	go func() {
+	wg.Go(func() {
 		var buf [1]byte
 		for {
 			n, err := os.Stdin.Read(buf[:])
@@ -234,10 +234,11 @@ func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
 				return
 			}
 		}
-	}()
+	})
 
 	return func() {
 		signal.Stop(sigCh)
+		_ = os.Stdin.Close()
 		wg.Wait()
 	}
 }
