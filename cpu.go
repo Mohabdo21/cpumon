@@ -122,18 +122,22 @@ func formatFreq(kHz int64) string {
 	return fmt.Sprintf("%d MHz", kHz/1000)
 }
 
-func discoverHwmonTemps(hwmonPath string) []HwmonTemp {
+func discoverHwmonTemps(fr FileReader, hwmonPath string) []HwmonTemp {
 	if hwmonPath == "" {
 		return nil
 	}
 	matches, _ := filepath.Glob(filepath.Join(hwmonPath, "temp*_input"))
 	temps := make([]HwmonTemp, 0, len(matches))
 	for _, input := range matches {
+		label := "CPU"
+		if l, err := fr.Read(strings.Replace(input, "_input", "_label", 1)); err == nil {
+			label = l
+		}
 		temps = append(temps, HwmonTemp{
-			Input: input,
-			Label: strings.Replace(input, "_input", "_label", 1),
-			Crit:  strings.Replace(input, "_input", "_crit", 1),
-			Max:   strings.Replace(input, "_input", "_max", 1),
+			Input:     input,
+			LabelName: label,
+			Crit:      strings.Replace(input, "_input", "_crit", 1),
+			Max:       strings.Replace(input, "_input", "_max", 1),
 		})
 	}
 	return temps
@@ -177,11 +181,7 @@ func readThermalFromHwmon(
 		}
 		tempC := float64(milli) / 1000.0
 
-		label := "CPU"
-		if l, err := fr.Read(t.Label); err == nil {
-			label = l
-		}
-
+		label := t.LabelName
 		temp := fmt.Sprintf("+%.1f°C", tempC)
 		limit := ""
 		coreLimit := ""

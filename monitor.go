@@ -41,7 +41,7 @@ func NewMonitor() (*Monitor, error) {
 
 	hwmonPath := discoverHwmonCPU(fr)
 	cpuFreqs := discoverCPUTopology(fr)
-	hwmonTemps := discoverHwmonTemps(hwmonPath)
+	hwmonTemps := discoverHwmonTemps(fr, hwmonPath)
 	fanFiles := discoverFanFiles()
 	thinkpadFan := fileExists(thinkpadFanPath)
 	throttleOK := fileExists(cpuThrottlePath)
