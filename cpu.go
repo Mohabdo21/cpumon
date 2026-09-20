@@ -90,10 +90,10 @@ func discoverHwmonCPU(fr FileReader) string {
 	return ""
 }
 
-func readFrequencies(fr FileReader, infos []CPUFreqInfo, coreFreqs map[int]string) string {
+func readFrequencies(fr FileReader, infos []CPUFreqInfo, coreFreqs map[int]string) (string, int64) {
 	clear(coreFreqs)
 	if len(infos) == 0 {
-		return "N/A"
+		return "N/A", 0
 	}
 
 	var total, count int64
@@ -109,10 +109,11 @@ func readFrequencies(fr FileReader, infos []CPUFreqInfo, coreFreqs map[int]strin
 	}
 
 	if count == 0 {
-		return "N/A"
+		return "N/A", 0
 	}
 
-	return formatFreq(total / count)
+	avg := total / count
+	return formatFreq(avg), avg
 }
 
 func formatFreq(kHz int64) string {

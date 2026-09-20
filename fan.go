@@ -29,51 +29,68 @@ func readFanStatus(
 	fanFiles []string,
 	thinkpadFan bool,
 	lineBuf *[]string,
-) (string, error) {
+) (string, int64, error) {
 	if thinkpadFan {
-		if out, err := readThinkPadFan(fr, lineBuf); err == nil {
-			return out, nil
+		if out, rpm, err := readThinkPadFan(fr, lineBuf); err == nil {
+			return out, rpm, nil
 		}
 	}
 
 	if len(fanFiles) > 0 {
-		if out, err := readHwmonFan(fr, fanFiles, lineBuf); err == nil {
-			return out, nil
+		if out, rpm, err := readHwmonFan(fr, fanFiles, lineBuf); err == nil {
+			return out, rpm, nil
 		}
 	}
 
-	return "", ErrNoFanData
+	return "", 0, ErrNoFanData
 }
 
-func readThinkPadFan(fr FileReader, lineBuf *[]string) (string, error) {
+func readThinkPadFan(fr FileReader, lineBuf *[]string) (string, int64, error) {
 	data, err := fr.Read(thinkpadFanPath)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 
 	lines := (*lineBuf)[:0]
+	var rpm int64
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if fanFilterRe.MatchString(line) {
 			lines = append(lines, line)
+			if v, ok := fanSpeedRPM(line); ok && v > rpm {
+				rpm = v
+			}
 		}
 	}
 	*lineBuf = lines
 
 	if len(lines) == 0 {
-		return "", ErrNoFanData
+		return "", 0, ErrNoFanData
 	}
-	return "[ThinkPad]\n" + strings.Join(lines, "\n"), nil
+	return "[ThinkPad]\n" + strings.Join(lines, "\n"), rpm, nil
 }
 
-func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, error) {
+// fanSpeedRPM extracts the RPM value from a ThinkPad "speed:" line.
+func fanSpeedRPM(line string) (int64, bool) {
+	rest, ok := strings.CutPrefix(line, "speed:")
+	if !ok {
+		return 0, false
+	}
+	return parseInt64(strings.TrimSpace(rest))
+}
+
+func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, int64, error) {
 	lines := (*lineBuf)[:0]
+	var maxRPM int64
 
 	for _, f := range fanFiles {
 		rpmVal, ok := readInt(fr, f)
 		if !ok || rpmVal <= 0 {
 			continue
+		}
+		if rpmVal > maxRPM {
+			maxRPM = rpmVal
 		}
 
 		label := filepath.Base(filepath.Dir(f))
@@ -86,7 +103,7 @@ func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, 
 	*lineBuf = lines
 
 	if len(lines) == 0 {
-		return "", ErrNoFanData
+		return "", 0, ErrNoFanData
 	}
-	return "[hwmon]\n" + strings.Join(lines, "\n"), nil
+	return "[hwmon]\n" + strings.Join(lines, "\n"), maxRPM, nil
 }

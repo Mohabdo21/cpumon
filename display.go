@@ -375,50 +375,41 @@ func printSessionSummary(s SessionStats) {
 	secs := int(duration.Seconds()) % 60
 
 	fmt.Printf("\n%s-- Session Summary --%s\n", ansiBold, ansiReset)
-	fmt.Printf(
-		"  %s%-14s%s %dm%ds (%d samples)\n",
-		ansiDim,
-		"Duration:",
-		ansiReset,
-		mins,
-		secs,
-		s.Samples,
-	)
+	writeSummaryField("Duration:", fmt.Sprintf("%dm%ds (%d samples)", mins, secs, s.Samples))
 
 	if s.Samples > 0 {
 		avgCPU := s.TotalCPU / float64(s.Samples)
-		fmt.Printf(
-			"  %s%-14s%s avg %.1f%%  peak %.1f%%\n",
-			ansiDim,
-			"CPU Usage:",
-			ansiReset,
-			avgCPU,
-			s.PeakCPU,
+		writeSummaryField("CPU Usage:", fmt.Sprintf("avg %.1f%%  peak %.1f%%", avgCPU, s.PeakCPU))
+	}
+
+	if s.FreqSamples > 0 {
+		avgFreq := s.TotalFreq / s.FreqSamples
+		writeSummaryField(
+			"CPU Freq:",
+			fmt.Sprintf("avg %s  peak %s", formatFreq(avgFreq), formatFreq(s.PeakFreq)),
 		)
 	}
 
 	if s.Samples > 0 && s.PeakTemp > 0 {
-		fmt.Printf(
-			"  %s%-14s%s min %.0f°C  peak %.0f°C\n",
-			ansiDim,
+		writeSummaryField(
 			"Temperature:",
-			ansiReset,
-			s.MinTemp,
-			s.PeakTemp,
+			fmt.Sprintf("min %.0f°C  peak %.0f°C", s.MinTemp, s.PeakTemp),
 		)
 	}
 
 	if s.PowerSamples > 0 {
 		avgPower := s.TotalPower / float64(s.PowerSamples)
-		fmt.Printf(
-			"  %s%-14s%s avg %.1f W  peak %.1f W\n",
-			ansiDim,
-			"Power:",
-			ansiReset,
-			avgPower,
-			s.PeakPower,
-		)
+		writeSummaryField("Power:", fmt.Sprintf("avg %.1f W  peak %.1f W", avgPower, s.PeakPower))
+	}
+
+	if s.FanSamples > 0 {
+		avgFan := s.TotalFan / s.FanSamples
+		writeSummaryField("Fan Speed:", fmt.Sprintf("avg %d RPM  peak %d RPM", avgFan, s.PeakFan))
 	}
 
 	fmt.Println()
+}
+
+func writeSummaryField(label, value string) {
+	fmt.Printf("  %s%-14s%s %s\n", ansiDim, label, ansiReset, value)
 }

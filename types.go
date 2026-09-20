@@ -57,6 +57,15 @@ type SessionStats struct {
 	PeakPower    float64
 	TotalPower   float64
 	PowerSamples uint64
+
+	// CPU frequency in kHz and fan speed in RPM, sampled per tick.
+	// Sample counters are int64 to match the int64 totals (no conversions).
+	PeakFreq    int64
+	TotalFreq   int64
+	FreqSamples int64
+	PeakFan     int64
+	TotalFan    int64
+	FanSamples  int64
 }
 
 type Metrics struct {
@@ -129,9 +138,13 @@ func readOrNA(fr FileReader, path string) string {
 
 func readInt(fr FileReader, path string) (int64, bool) {
 	raw, err := fr.Read(path)
-	if err != nil || raw == "" {
+	if err != nil {
 		return 0, false
 	}
-	v, err := strconv.ParseInt(raw, 10, 64)
+	return parseInt64(raw)
+}
+
+func parseInt64(s string) (int64, bool) {
+	v, err := strconv.ParseInt(s, 10, 64)
 	return v, err == nil
 }

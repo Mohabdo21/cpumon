@@ -67,6 +67,72 @@ func TestDiscoverHwmonTemps(t *testing.T) {
 	}
 }
 
+func TestReadFrequencies(t *testing.T) {
+	tests := []struct {
+		name    string
+		files   map[string]string
+		infos   []CPUFreqInfo
+		want    string
+		wantKHz int64
+	}{
+		{
+			name:    "no cpu freq interfaces",
+			infos:   nil,
+			want:    "N/A",
+			wantKHz: 0,
+		},
+		{
+			name: "average across cores",
+			files: map[string]string{
+				"/sys/cpu0/freq": "2400000",
+				"/sys/cpu1/freq": "3600000",
+			},
+			infos: []CPUFreqInfo{
+				{Path: "/sys/cpu0/freq", CoreID: 0},
+				{Path: "/sys/cpu1/freq", CoreID: 1},
+			},
+			want:    "3.0 GHz",
+			wantKHz: 3000000,
+		},
+		{
+			name: "invalid and zero values skipped",
+			files: map[string]string{
+				"/sys/cpu0/freq": "0",
+				"/sys/cpu1/freq": "bad",
+			},
+			infos: []CPUFreqInfo{
+				{Path: "/sys/cpu0/freq", CoreID: 0},
+				{Path: "/sys/cpu1/freq", CoreID: 1},
+			},
+			want:    "N/A",
+			wantKHz: 0,
+		},
+		{
+			name: "mhz formatting",
+			files: map[string]string{
+				"/sys/cpu0/freq": "800000",
+			},
+			infos:   []CPUFreqInfo{{Path: "/sys/cpu0/freq", CoreID: 0}},
+			want:    "800 MHz",
+			wantKHz: 800000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := mkMock(tt.files)
+			coreFreqs := make(map[int]string)
+			got, gotKHz := readFrequencies(fs, tt.infos, coreFreqs)
+			if got != tt.want {
+				t.Errorf("readFrequencies() = %q, want %q", got, tt.want)
+			}
+			if gotKHz != tt.wantKHz {
+				t.Errorf("readFrequencies() kHz = %d, want %d", gotKHz, tt.wantKHz)
+			}
+		})
+	}
+}
+
 func TestReadThermalFromHwmon(t *testing.T) {
 	// Base fixture: one package temp with full crit+max limit data.
 	//

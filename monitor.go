@@ -87,7 +87,7 @@ func NewMonitor() (*Monitor, error) {
 }
 
 func (m *Monitor) collect() Metrics {
-	avgFreq := readFrequencies(m.fr, m.cpuFreqs, m.coreFreqBuf)
+	avgFreq, avgFreqKHZ := readFrequencies(m.fr, m.cpuFreqs, m.coreFreqBuf)
 
 	cur, curCore := readProcStat(m.fr)
 	usage := calcUsage(m.prevStat, cur)
@@ -102,10 +102,10 @@ func (m *Monitor) collect() Metrics {
 		coreUsage,
 		&m.coreBuf,
 	)
-	fanStatus, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
+	fanStatus, fanRPM, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
 	power := m.rapl.Read(m.fr)
 
-	m.updateStats(usage, cores, power)
+	m.updateStats(usage, cores, power, avgFreqKHZ, fanRPM)
 
 	return Metrics{
 		DeviceModel: m.deviceModel,
@@ -127,7 +127,13 @@ func (m *Monitor) collect() Metrics {
 	}
 }
 
-func (m *Monitor) updateStats(usage float64, cores []CoreStatus, power PowerReading) {
+func (m *Monitor) updateStats(
+	usage float64,
+	cores []CoreStatus,
+	power PowerReading,
+	avgFreqKHZ int64,
+	fanRPM int64,
+) {
 	if usage >= 0 {
 		if usage > m.stats.PeakCPU {
 			m.stats.PeakCPU = usage
@@ -161,7 +167,32 @@ func (m *Monitor) updateStats(usage float64, cores []CoreStatus, power PowerRead
 		}
 	}
 
+	m.accumFreq(avgFreqKHZ)
+	m.accumFan(fanRPM)
+
 	m.stats.Samples++
+}
+
+func (m *Monitor) accumFreq(kHz int64) {
+	if kHz <= 0 {
+		return
+	}
+	if kHz > m.stats.PeakFreq {
+		m.stats.PeakFreq = kHz
+	}
+	m.stats.TotalFreq += kHz
+	m.stats.FreqSamples++
+}
+
+func (m *Monitor) accumFan(rpm int64) {
+	if rpm <= 0 {
+		return
+	}
+	if rpm > m.stats.PeakFan {
+		m.stats.PeakFan = rpm
+	}
+	m.stats.TotalFan += rpm
+	m.stats.FanSamples++
 }
 
 func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
