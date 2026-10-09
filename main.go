@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const releaseVersion = "0.2.8"
+const releaseVersion = "0.2.9"
 
 var (
 	version = releaseVersion
