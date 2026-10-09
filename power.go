@@ -9,6 +9,7 @@ import (
 type RAPLZone struct {
 	Name       string
 	EnergyPath string
+	MaxRangeUJ int64
 }
 
 type PowerReading struct {
@@ -49,9 +50,30 @@ func discoverRAPL(fr FileReader) []RAPLZone {
 		zones = append(zones, RAPLZone{
 			Name:       formatRAPLName(name),
 			EnergyPath: ePath,
+			MaxRangeUJ: readMaxEnergyRange(fr, dir),
 		})
 	}
 	return zones
+}
+
+// readMaxEnergyRange returns the counter wrap width in uJ, defaulting to 32-bit.
+func readMaxEnergyRange(fr FileReader, dir string) int64 {
+	if v, ok := readInt(fr, filepath.Join(dir, "max_energy_range_uj")); ok && v > 0 {
+		return v
+	}
+	return 1 << 32
+}
+
+// energyDelta returns the forward energy delta, correcting for counter wraparound.
+func energyDelta(cur, prev, maxRange int64) int64 {
+	delta := cur - prev
+	if delta < 0 {
+		if maxRange <= 0 {
+			maxRange = 1 << 32
+		}
+		delta = ((delta % maxRange) + maxRange) % maxRange
+	}
+	return delta
 }
 
 func formatRAPLName(name string) string {
@@ -107,10 +129,7 @@ func (s *raplState) Read(fr FileReader) PowerReading {
 			continue
 		}
 
-		delta := cur - s.prevUJ[i]
-		if delta < 0 {
-			delta += 1 << 32
-		}
+		delta := energyDelta(cur, s.prevUJ[i], z.MaxRangeUJ)
 
 		watts := float64(delta) / 1e6 / dt
 		s.prevUJ[i] = cur
