@@ -22,7 +22,9 @@ error() {
 }
 
 preflight_checks() {
-	if ! git diff --quiet HEAD; then
+	local status
+	status=$(git status --porcelain --untracked-files=all)
+	if [ -n "$status" ]; then
 		error "Working tree has uncommitted changes. Commit or stash first."
 	fi
 	local branch
@@ -117,12 +119,7 @@ bump_version() {
 	info "Bumping version: $current_ver -> $ver_no_v"
 
 	sed -i "s/const releaseVersion = \"$current_ver\"/const releaseVersion = \"$ver_no_v\"/" main.go
-	sed -i "s/^pkgver=.*/pkgver=$ver_no_v/" aur/PKGBUILD
-	sed -i "s/^pkgrel=.*/pkgrel=1/" aur/PKGBUILD
-	sed -i "s/^pkgver =.*/pkgver = $ver_no_v/" aur/.SRCINFO
-	sed -i "s/^pkgrel =.*/pkgrel = 1/" aur/.SRCINFO
-
-	git add main.go aur/PKGBUILD aur/.SRCINFO
+	git add main.go
 	git commit -m "chore: bump version to $ver_no_v"
 	info "Version bump committed"
 }
@@ -138,7 +135,7 @@ build_binaries() {
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 		-trimpath -ldflags="-s -w -X main.commit=$commit" -buildmode=pie \
 		-o dist/cpumon-linux-arm64 .
-	cd dist && sha256sum ./* >checksums.txt && cd ..
+	(cd dist && sha256sum cpumon-linux-amd64 cpumon-linux-arm64 >checksums.txt)
 	info "Binaries built in dist/:"
 	ls -lh dist/
 }
@@ -155,21 +152,6 @@ tag_and_push() {
 	git tag $tag_opts "$VERSION" -m "$VERSION"
 	git push origin "$VERSION" $push_opts
 	info "Tag $VERSION pushed to origin"
-}
-
-update_aur_checksums() {
-	local ver_no_v="${VERSION#v}"
-	info "Computing sha256sums from GitHub tarball..."
-	local sha
-	sha=$(curl -sL "https://github.com/Mohabdo21/cpumon/archive/$VERSION.tar.gz" | sha256sum | cut -d' ' -f1)
-
-	sed -i "s/^sha256sums=.*/sha256sums=('$sha')/" aur/PKGBUILD
-	sed -i "s/^sha256sums =.*/sha256sums = $sha/" aur/.SRCINFO
-
-	git add aur/PKGBUILD aur/.SRCINFO
-	git commit -m "chore: update AUR checksums for $VERSION"
-	git push origin main
-	info "AUR checksums committed and pushed"
 }
 
 create_release() {
@@ -197,7 +179,12 @@ create_release() {
 
 publish_aur() {
 	info "Publishing to AUR..."
-	make aur-publish
+	make aur-publish RELEASE_VERSION="$VERSION"
+	if ! git diff --quiet -- aur/PKGBUILD aur/.SRCINFO; then
+		git add aur/PKGBUILD aur/.SRCINFO
+		git commit -m "chore: update AUR metadata for $VERSION"
+		git push origin main
+	fi
 	info "AUR publish complete"
 }
 
@@ -214,7 +201,6 @@ main() {
 	bump_version
 	build_binaries
 	tag_and_push
-	update_aur_checksums
 	create_release
 	publish_aur
 
