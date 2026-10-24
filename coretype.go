@@ -19,6 +19,33 @@ type CoreTopology struct {
 	Classes map[int]CoreClass
 	Hybrid  bool
 	Vendor  string
+	ordered bool
+	label   string
+}
+
+// prepareThermalOrder makes package and core groups contiguous before sampling.
+// Missing sensor readings can then be skipped without changing group order.
+func prepareThermalOrder(temps []HwmonTemp, topo *CoreTopology) {
+	for i := range temps {
+		temps[i].coreID = extractCoreID(temps[i].LabelName)
+		temps[i].metadataReady = true
+	}
+	sort.SliceStable(temps, func(i, j int) bool {
+		a, b := temps[i].coreID, temps[j].coreID
+		if (a < 0) != (b < 0) {
+			return a < 0
+		}
+		if a < 0 || !topo.Hybrid {
+			return false
+		}
+		aEff, bEff := topo.Classes[a] == CoreClassEfficiency, topo.Classes[b] == CoreClassEfficiency
+		if aEff != bEff {
+			return !aEff
+		}
+		return a < b
+	})
+	topo.label = coreClassLabel(*topo)
+	topo.ordered = true
 }
 
 func discoverCoreClasses(fr FileReader, coreMap map[int]int) CoreTopology {
@@ -153,6 +180,9 @@ func sortCoresByID(cores []CoreStatus) {
 }
 
 func coreClassLabel(topo CoreTopology) string {
+	if topo.label != "" {
+		return topo.label
+	}
 	if !topo.Hybrid {
 		return ""
 	}

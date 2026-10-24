@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -46,5 +47,53 @@ func TestThermalLimitsCachedBetweenSamples(t *testing.T) {
 	cores, err = readThermalFromHwmon(fr, temps, nil, nil, &buf)
 	if err != nil || cores[0].CoreLimit != "" || cores[0].Limit != "" {
 		t.Fatalf("removed limits = %v, %v", cores, err)
+	}
+}
+
+func TestPreparedCoreGridMatchesOutput(t *testing.T) {
+	for _, hybrid := range []bool{false, true} {
+		topo := CoreTopology{
+			Hybrid: hybrid,
+			Classes: map[int]CoreClass{
+				2:  CoreClassPerformance,
+				10: CoreClassPerformance,
+				4:  CoreClassEfficiency,
+			},
+		}
+		files := map[string]string{"pkg": "50000", "c2": "40000", "c10": "45000", "c4": "42000"}
+		temps := []HwmonTemp{
+			{Input: "c10", LabelName: "Core 10"},
+			{Input: "pkg", LabelName: "Package id 0"},
+			{Input: "c4", LabelName: "Core 4"},
+			{Input: "c2", LabelName: "Core 2"},
+		}
+		fr := mkMock(files)
+		var buf []CoreStatus
+		ordered := append([]HwmonTemp(nil), temps...)
+		preparedTopo := topo
+		prepareThermalOrder(ordered, &preparedTopo)
+		for _, missing := range []string{"none", "c10", "pkg", "c4", "c2"} {
+			delete(files, missing)
+			for _, width := range []int{40, 120, 200} {
+				original, originalErr := readThermalFromHwmon(fr, temps, nil, nil, &buf)
+				var want strings.Builder
+				writeCoreGrid(&want, original, SessionStats{}, width, topo)
+				prepared, preparedErr := readThermalFromHwmon(fr, ordered, nil, nil, &buf)
+				var got strings.Builder
+				writeCoreGrid(&got, prepared, SessionStats{}, width, preparedTopo)
+				if originalErr != preparedErr || got.String() != want.String() {
+					t.Fatalf(
+						"hybrid=%v missing=%s width=%d: output changed\ngot %q (%v)\nwant %q (%v)",
+						hybrid,
+						missing,
+						width,
+						got.String(),
+						preparedErr,
+						want.String(),
+						originalErr,
+					)
+				}
+			}
+		}
 	}
 }

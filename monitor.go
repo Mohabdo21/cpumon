@@ -78,6 +78,7 @@ func NewMonitor() (*Monitor, error) {
 	}
 
 	m.topology = discoverCoreClasses(fr, m.cpuCoreMap)
+	prepareThermalOrder(m.hwmonTemps, &m.topology)
 
 	if zones := discoverRAPL(fr); len(zones) > 0 {
 		m.rapl = newRAPLState(fr, zones)

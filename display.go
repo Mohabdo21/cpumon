@@ -253,6 +253,10 @@ func writeCoreGrid(
 		}
 	}
 
+	if topo.ordered {
+		writeOrderedCoreGroups(b, cores, width, topo)
+		return
+	}
 	if topo.Hybrid {
 		perf, eff := classifyCores(cores, topo)
 		writeCoreGroup(b, "P-Cores", perf, width)
@@ -271,6 +275,27 @@ func writeCoreGrid(
 	}
 
 	writeCoreRows(b, perCore, width)
+}
+
+func writeOrderedCoreGroups(b *strings.Builder, cores []CoreStatus, width int, topo CoreTopology) {
+	start := 0
+	for start < len(cores) && cores[start].IsPackage {
+		start++
+	}
+	cores = cores[start:]
+	if len(cores) == 0 {
+		return
+	}
+	if !topo.Hybrid {
+		writeCoreRows(b, cores, width)
+		return
+	}
+	split := 0
+	for split < len(cores) && topo.Classes[cores[split].coreID] != CoreClassEfficiency {
+		split++
+	}
+	writeCoreGroup(b, "P-Cores", cores[:split], width)
+	writeCoreGroup(b, "E-Cores", cores[split:], width)
 }
 
 func writeCoreGroup(b *strings.Builder, title string, cores []CoreStatus, width int) {

@@ -32,11 +32,41 @@ func BenchmarkCollect(b *testing.B) {
 	stat.WriteString("intr " + strings.Repeat("0 ", 2200) + "\nctxt 123\n")
 	files[procStatPath] = stat.String()
 	m.fr = mkMock(files)
+	prepareThermalOrder(m.hwmonTemps, &m.topology)
 	m.collect()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
 		m.collect()
+	}
+}
+
+func BenchmarkCoreGrid(b *testing.B) {
+	topo := CoreTopology{Hybrid: true, Classes: map[int]CoreClass{}}
+	cores := []CoreStatus{{Label: "Package id 0", IsPackage: true, Temp: "+50.0°C", TempC: 50}}
+	for i := range 16 {
+		topo.Classes[i] = CoreClassPerformance
+		if i >= 8 {
+			topo.Classes[i] = CoreClassEfficiency
+		}
+		cores = append(
+			cores,
+			CoreStatus{
+				coreID: i,
+				Label:  fmt.Sprintf("Core %d", i),
+				Temp:   "+50.0°C",
+				TempC:  50,
+				Usage:  50,
+			},
+		)
+	}
+	prepareThermalOrder(nil, &topo)
+	var out strings.Builder
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		out.Reset()
+		writeCoreGrid(&out, cores, SessionStats{}, 120, topo)
 	}
 }
 
