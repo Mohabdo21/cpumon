@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -175,7 +176,9 @@ func readThermalFromHwmon(
 	}
 
 	cores := (*coreBuf)[:0]
-	for _, t := range temps {
+	now := time.Now()
+	for i := range temps {
+		t := &temps[i]
 		milli, ok := readInt(fr, t.Input)
 		if !ok {
 			continue
@@ -184,32 +187,21 @@ func readThermalFromHwmon(
 
 		label := t.LabelName
 		temp := fmt.Sprintf("+%.1f°C", tempC)
-		limit := ""
-		coreLimit := ""
-		critM, critOK := readInt(fr, t.Crit)
-		if critOK && critM > 0 {
-			limit = fmt.Sprintf("(crit = +%.1f°C)", float64(critM)/1000.0)
-			coreLimit = fmt.Sprintf("C%.0f", float64(critM)/1000.0)
+		if !t.metadataReady {
+			t.coreID = extractCoreID(label)
+			t.metadataReady = true
 		}
-		if maxM, ok := readInt(fr, t.Max); ok && maxM > 0 {
-			if critOK && critM > 0 {
-				coreLimit = fmt.Sprintf("H%.0f/C%.0f", float64(maxM)/1000.0, float64(critM)/1000.0)
-				limit = fmt.Sprintf(
-					"(high = +%.1f°C, crit = +%.1f°C)",
-					float64(maxM)/1000.0, float64(critM)/1000.0,
-				)
-			} else {
-				coreLimit = fmt.Sprintf("H%.0f", float64(maxM)/1000.0)
-				limit = fmt.Sprintf("(high = +%.1f°C)", float64(maxM)/1000.0)
-			}
+		if !now.Before(t.limitsRefreshAt) {
+			refreshThermalLimits(fr, t)
+			t.limitsRefreshAt = now.Add(30 * time.Second)
 		}
 
 		isPackage := true
 		freq := ""
 		usage := -1.0
-		if m := coreNumRe.FindStringSubmatch(label); m != nil {
+		if t.coreID >= 0 {
 			isPackage = false
-			coreNum, _ := strconv.Atoi(m[1])
+			coreNum := t.coreID
 			if f, ok := coreFreqs[coreNum]; ok {
 				freq = f
 			}
@@ -219,12 +211,13 @@ func readThermalFromHwmon(
 		}
 
 		cores = append(cores, CoreStatus{
+			coreID:    t.coreID,
 			Label:     label,
 			Freq:      freq,
 			Usage:     usage,
 			Temp:      temp,
-			Limit:     limit,
-			CoreLimit: coreLimit,
+			Limit:     t.limit,
+			CoreLimit: t.coreLimit,
 			TempC:     tempC,
 			IsPackage: isPackage,
 		})
@@ -235,4 +228,25 @@ func readThermalFromHwmon(
 		return nil, ErrNoThermalData
 	}
 	return cores, nil
+}
+
+func refreshThermalLimits(fr FileReader, t *HwmonTemp) {
+	t.limit, t.coreLimit = "", ""
+	crit, critOK := readInt(fr, t.Crit)
+	maxTemp, maxOK := readInt(fr, t.Max)
+	switch {
+	case critOK && crit > 0 && maxOK && maxTemp > 0:
+		t.limit = fmt.Sprintf(
+			"(high = +%.1f°C, crit = +%.1f°C)",
+			float64(maxTemp)/1000,
+			float64(crit)/1000,
+		)
+		t.coreLimit = fmt.Sprintf("H%.0f/C%.0f", float64(maxTemp)/1000, float64(crit)/1000)
+	case critOK && crit > 0:
+		t.limit = fmt.Sprintf("(crit = +%.1f°C)", float64(crit)/1000)
+		t.coreLimit = fmt.Sprintf("C%.0f", float64(crit)/1000)
+	case maxOK && maxTemp > 0:
+		t.limit = fmt.Sprintf("(high = +%.1f°C)", float64(maxTemp)/1000)
+		t.coreLimit = fmt.Sprintf("H%.0f", float64(maxTemp)/1000)
+	}
 }

@@ -27,6 +27,7 @@ func discoverFanFiles() []string {
 func readFanStatus(
 	fr FileReader,
 	fanFiles []string,
+	labels map[string]string,
 	thinkpadFan bool,
 	lineBuf *[]string,
 ) (string, int64, error) {
@@ -37,7 +38,7 @@ func readFanStatus(
 	}
 
 	if len(fanFiles) > 0 {
-		if out, rpm, err := readHwmonFan(fr, fanFiles, lineBuf); err == nil {
+		if out, rpm, err := readHwmonFan(fr, fanFiles, labels, lineBuf); err == nil {
 			return out, rpm, nil
 		}
 	}
@@ -80,7 +81,12 @@ func fanSpeedRPM(line string) (int64, bool) {
 	return parseInt64(strings.TrimSpace(rest))
 }
 
-func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, int64, error) {
+func readHwmonFan(
+	fr FileReader,
+	fanFiles []string,
+	labels map[string]string,
+	lineBuf *[]string,
+) (string, int64, error) {
 	lines := (*lineBuf)[:0]
 	var maxRPM int64
 
@@ -93,9 +99,13 @@ func readHwmonFan(fr FileReader, fanFiles []string, lineBuf *[]string) (string, 
 			maxRPM = rpmVal
 		}
 
-		label := filepath.Base(filepath.Dir(f))
-		if l, err := fr.Read(strings.Replace(f, "_input", "_label", 1)); err == nil {
-			label = l
+		label, cached := labels[f]
+		if !cached {
+			label = filepath.Base(filepath.Dir(f))
+			if l, err := fr.Read(strings.Replace(f, "_input", "_label", 1)); err == nil {
+				label = l
+			}
+			labels[f] = label
 		}
 
 		lines = append(lines, fmt.Sprintf("%s: %d RPM", label, rpmVal))

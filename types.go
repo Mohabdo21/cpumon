@@ -93,13 +93,19 @@ type CPUFreqInfo struct {
 }
 
 type HwmonTemp struct {
-	Input     string
-	LabelName string
-	Crit      string
-	Max       string
+	Input           string
+	LabelName       string
+	Crit            string
+	Max             string
+	coreID          int
+	metadataReady   bool
+	limit           string
+	coreLimit       string
+	limitsRefreshAt time.Time
 }
 
 type CoreStatus struct {
+	coreID    int
 	Label     string
 	Freq      string
 	Usage     float64

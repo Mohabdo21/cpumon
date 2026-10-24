@@ -17,6 +17,7 @@ type Monitor struct {
 	cpuFreqs     []CPUFreqInfo
 	hwmonTemps   []HwmonTemp
 	fanFiles     []string
+	fanLabels    map[string]string
 	thinkpadFan  bool
 	throttleOK   bool
 	kernel       string
@@ -58,6 +59,7 @@ func NewMonitor() (*Monitor, error) {
 		cpuFreqs:     cpuFreqs,
 		hwmonTemps:   hwmonTemps,
 		fanFiles:     fanFiles,
+		fanLabels:    make(map[string]string, len(fanFiles)),
 		thinkpadFan:  thinkpadFan,
 		throttleOK:   throttleOK,
 		kernel:       readOrNA(fr, kernelReleasePath),
@@ -109,7 +111,7 @@ func (m *Monitor) collect() Metrics {
 		coreUsage,
 		&m.coreBuf,
 	)
-	fanStatus, fanRPM, _ := readFanStatus(m.fr, m.fanFiles, m.thinkpadFan, &m.lineBuf)
+	fanStatus, fanRPM, _ := readFanStatus(m.fr, m.fanFiles, m.fanLabels, m.thinkpadFan, &m.lineBuf)
 	power := m.rapl.Read(m.fr)
 
 	m.updateStats(usage, cores, power, avgFreqKHZ, fanRPM)

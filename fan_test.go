@@ -53,7 +53,13 @@ func TestReadFanStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := mkMock(tt.files)
-			status, rpm, err := readFanStatus(fs, tt.fanFiles, tt.thinkpad, &[]string{})
+			status, rpm, err := readFanStatus(
+				fs,
+				tt.fanFiles,
+				make(map[string]string),
+				tt.thinkpad,
+				&[]string{},
+			)
 			if tt.wantErr {
 				if !errors.Is(err, ErrNoFanData) {
 					t.Fatalf("err = %v, want ErrNoFanData", err)
@@ -93,5 +99,24 @@ func TestFanSpeedRPM(t *testing.T) {
 		if got != tt.want || ok != tt.ok {
 			t.Errorf("fanSpeedRPM(%q) = %d, %v; want %d, %v", tt.line, got, ok, tt.want, tt.ok)
 		}
+	}
+}
+
+func TestFanLabelCached(t *testing.T) {
+	files := map[string]string{"hwmon0/fan1_input": "4200", "hwmon0/fan1_label": "CPU"}
+	fr := countingFileReader{mockFileReader: mkMock(files), reads: make(map[string]int)}
+	var buf []string
+	paths := []string{"hwmon0/fan1_input"}
+	labels := make(map[string]string)
+	if _, _, err := readFanStatus(fr, paths, labels, false, &buf); err != nil {
+		t.Fatal(err)
+	}
+	files["hwmon0/fan1_label"] = "changed"
+	status, rpm, err := readFanStatus(fr, paths, labels, false, &buf)
+	if err != nil || rpm != 4200 || status != "[hwmon]\nCPU: 4200 RPM" {
+		t.Fatalf("cached fan label = %q, %d, %v", status, rpm, err)
+	}
+	if fr.reads["hwmon0/fan1_input"] != 2 || fr.reads["hwmon0/fan1_label"] != 1 {
+		t.Fatalf("sample reads = %v", fr.reads)
 	}
 }
