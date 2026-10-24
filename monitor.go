@@ -11,21 +11,24 @@ import (
 )
 
 type Monitor struct {
-	fr          FileReader
-	cpuModel    string
-	deviceModel string
-	cpuFreqs    []CPUFreqInfo
-	hwmonTemps  []HwmonTemp
-	fanFiles    []string
-	thinkpadFan bool
-	throttleOK  bool
-	kernel      string
-	governor    string
-	energyBias  string
-	turboBoost  string
-	prevStat    CPUTimes
-	prevCore    map[int]CPUTimes
-	cpuCoreMap  map[int]int
+	fr           FileReader
+	cpuModel     string
+	deviceModel  string
+	cpuFreqs     []CPUFreqInfo
+	hwmonTemps   []HwmonTemp
+	fanFiles     []string
+	thinkpadFan  bool
+	throttleOK   bool
+	kernel       string
+	governor     string
+	energyBias   string
+	turboBoost   string
+	prevStat     CPUTimes
+	prevCore     map[int]CPUTimes
+	curCoreBuf   map[int]CPUTimes
+	coreDeltaBuf map[int]cpuDelta
+	coreUsageBuf map[int]float64
+	cpuCoreMap   map[int]int
 
 	coreFreqBuf map[int]string
 	coreBuf     []CoreStatus
@@ -46,27 +49,30 @@ func NewMonitor() (*Monitor, error) {
 	thinkpadFan := fileExists(thinkpadFanPath)
 	throttleOK := fileExists(cpuThrottlePath)
 
-	prevStat, prevCore := readProcStat(fr)
+	prevStat, prevCore := readProcStat(fr, nil)
 
 	m := &Monitor{
-		fr:          fr,
-		cpuModel:    readCPUModel(fr),
-		deviceModel: readDeviceModel(fr),
-		cpuFreqs:    cpuFreqs,
-		hwmonTemps:  hwmonTemps,
-		fanFiles:    fanFiles,
-		thinkpadFan: thinkpadFan,
-		throttleOK:  throttleOK,
-		kernel:      readOrNA(fr, kernelReleasePath),
-		governor:    readOrNA(fr, cpuGovernorPath),
-		energyBias:  readOrNA(fr, cpuEnergyBiasPath),
-		turboBoost:  readTurboBoost(fr),
-		prevStat:    prevStat,
-		prevCore:    prevCore,
-		cpuCoreMap:  discoverCPUCoreMap(fr),
-		coreFreqBuf: make(map[int]string, 32),
-		coreBuf:     make([]CoreStatus, 0, 32),
-		lineBuf:     make([]string, 0, 32),
+		fr:           fr,
+		cpuModel:     readCPUModel(fr),
+		deviceModel:  readDeviceModel(fr),
+		cpuFreqs:     cpuFreqs,
+		hwmonTemps:   hwmonTemps,
+		fanFiles:     fanFiles,
+		thinkpadFan:  thinkpadFan,
+		throttleOK:   throttleOK,
+		kernel:       readOrNA(fr, kernelReleasePath),
+		governor:     readOrNA(fr, cpuGovernorPath),
+		energyBias:   readOrNA(fr, cpuEnergyBiasPath),
+		turboBoost:   readTurboBoost(fr),
+		prevStat:     prevStat,
+		prevCore:     prevCore,
+		curCoreBuf:   make(map[int]CPUTimes, len(prevCore)),
+		coreDeltaBuf: make(map[int]cpuDelta, len(prevCore)),
+		coreUsageBuf: make(map[int]float64, len(prevCore)),
+		cpuCoreMap:   discoverCPUCoreMap(fr),
+		coreFreqBuf:  make(map[int]string, 32),
+		coreBuf:      make([]CoreStatus, 0, 32),
+		lineBuf:      make([]string, 0, 32),
 	}
 
 	m.topology = discoverCoreClasses(fr, m.cpuCoreMap)
@@ -89,10 +95,11 @@ func NewMonitor() (*Monitor, error) {
 func (m *Monitor) collect() Metrics {
 	avgFreq, avgFreqKHZ := readFrequencies(m.fr, m.cpuFreqs, m.coreFreqBuf)
 
-	cur, curCore := readProcStat(m.fr)
+	cur, curCore := readProcStat(m.fr, m.curCoreBuf)
 	usage := calcUsage(m.prevStat, cur)
 	m.prevStat = cur
-	coreUsage := calcPerCoreUsage(m.prevCore, curCore, m.cpuCoreMap)
+	coreUsage := calcPerCoreUsage(m.prevCore, curCore, m.cpuCoreMap, m.coreDeltaBuf, m.coreUsageBuf)
+	m.curCoreBuf = m.prevCore
 	m.prevCore = curCore
 
 	cores, _ := readCPUThermal(

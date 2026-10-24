@@ -22,17 +22,23 @@ func parseProcStatFields(fields []string) (idle, total uint64) {
 	return
 }
 
-func readProcStat(fr FileReader) (CPUTimes, map[int]CPUTimes) {
+func readProcStat(fr FileReader, cores map[int]CPUTimes) (CPUTimes, map[int]CPUTimes) {
+	clear(cores)
 	data, err := fr.Read(procStatPath)
 	if err != nil {
 		return CPUTimes{}, nil
 	}
 
 	var agg CPUTimes
-	cores := make(map[int]CPUTimes)
+	if cores == nil {
+		cores = make(map[int]CPUTimes)
+	}
 
 	for line, rest := "", data; rest != ""; {
 		line, rest, _ = strings.Cut(rest, "\n")
+		if !strings.HasPrefix(strings.TrimSpace(line), "cpu") {
+			continue
+		}
 		fields := strings.Fields(line)
 		if len(fields) < 5 {
 			continue
@@ -71,14 +77,21 @@ func calcUsage(prev, cur CPUTimes) float64 {
 	return float64(dt-(cur.Idle-prev.Idle)) / float64(dt) * 100
 }
 
-func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int) map[int]float64 {
+type cpuDelta struct{ busy, total uint64 }
+
+func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int,
+	agg map[int]cpuDelta, usage map[int]float64,
+) map[int]float64 {
+	clear(agg)
+	clear(usage)
 	if prev == nil || cur == nil {
 		return nil
 	}
 
 	// Aggregate per physical core.
-	type delta struct{ busy, total uint64 }
-	agg := make(map[int]*delta)
+	if agg == nil {
+		agg = make(map[int]cpuDelta)
+	}
 
 	for cpu, c := range cur {
 		p, ok := prev[cpu]
@@ -100,16 +113,15 @@ func calcPerCoreUsage(prev, cur map[int]CPUTimes, cpuToCore map[int]int) map[int
 		dt := c.Total - p.Total
 		di := c.Idle - p.Idle
 
-		d, ok := agg[coreID]
-		if !ok {
-			d = &delta{}
-			agg[coreID] = d
-		}
+		d := agg[coreID]
 		d.busy += dt - di
 		d.total += dt
+		agg[coreID] = d
 	}
 
-	usage := make(map[int]float64, len(agg))
+	if usage == nil {
+		usage = make(map[int]float64, len(agg))
+	}
 	for id, d := range agg {
 		if d.total > 0 {
 			usage[id] = float64(d.busy) / float64(d.total) * 100

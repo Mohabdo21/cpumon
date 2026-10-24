@@ -80,7 +80,7 @@ func TestReadProcStat(t *testing.T) {
 			if tt.errPath != "" {
 				fs.errs[tt.errPath] = errors.New("read failed")
 			}
-			agg, cores := readProcStat(fs)
+			agg, cores := readProcStat(fs, nil)
 			if agg != tt.wantAgg {
 				t.Errorf("agg = %+v, want %+v", agg, tt.wantAgg)
 			}
@@ -225,7 +225,7 @@ func TestCalcPerCoreUsage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := calcPerCoreUsage(tt.prev, tt.cur, tt.cpuToCore)
+			got := calcPerCoreUsage(tt.prev, tt.cur, tt.cpuToCore, nil, nil)
 			if len(got) != len(tt.want) {
 				t.Fatalf("got %v, want %v", got, tt.want)
 			}
@@ -235,5 +235,79 @@ func TestCalcPerCoreUsage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAccountingBuffersClearStaleCPUs(t *testing.T) {
+	fr := mkMock(map[string]string{procStatPath: "cpu 10 0 0 10 0\ncpu1 10 0 0 10 0\n"})
+	buf := map[int]CPUTimes{99: {Valid: true}}
+	_, cores := readProcStat(fr, buf)
+	if len(buf) != 1 || !buf[1].Valid {
+		t.Fatalf("stale counters: %v", buf)
+	}
+	cores[2] = CPUTimes{Valid: true}
+	if !buf[2].Valid {
+		t.Fatal("counter buffer not reused")
+	}
+	fr.errs[procStatPath] = errors.New("unreadable")
+	agg, cores := readProcStat(fr, buf)
+	if agg.Valid || cores != nil || len(buf) != 0 {
+		t.Fatalf("read failure: %+v, %v, buffer %v", agg, cores, buf)
+	}
+	prev := map[int]CPUTimes{1: {Total: 10, Idle: 5, Valid: true}}
+	cur := map[int]CPUTimes{1: {Total: 20, Idle: 10, Valid: true}}
+	deltas := map[int]cpuDelta{99: {busy: 1, total: 1}}
+	usage := map[int]float64{99: 100}
+	got := calcPerCoreUsage(prev, cur, nil, deltas, usage)
+	if len(got) != 1 || usage[1] != 50 || len(deltas) != 1 {
+		t.Fatalf("stale usage: %v, deltas %v", got, deltas)
+	}
+	got[2] = 25
+	if usage[2] != 25 {
+		t.Fatal("usage buffer not reused")
+	}
+	if got := calcPerCoreUsage(
+		nil,
+		cur,
+		nil,
+		deltas,
+		usage,
+	); got != nil || len(usage) != 0 ||
+		len(deltas) != 0 {
+		t.Fatalf("missing sample left stale usage: %v", usage)
+	}
+}
+
+func TestCollectCPUCounterBufferRotation(t *testing.T) {
+	fr := mkMock(map[string]string{"temp": "50000"})
+	m := Monitor{
+		fr: fr, hwmonTemps: []HwmonTemp{{Input: "temp", LabelName: "Core 0"}},
+		coreFreqBuf: make(map[int]string), curCoreBuf: make(map[int]CPUTimes),
+		coreDeltaBuf: make(map[int]cpuDelta), coreUsageBuf: make(map[int]float64),
+	}
+	for _, sample := range []struct {
+		stat string
+		fail bool
+		want float64
+	}{
+		{"cpu 10 0 0 10 0\ncpu0 10 0 0 10 0\n", false, -1},
+		{"cpu 20 0 0 20 0\ncpu0 20 0 0 20 0\n", false, 50},
+		{"cpu 30 0 0 30 0\n", false, -1},
+		{"cpu 40 0 0 40 0\ncpu0 40 0 0 40 0\n", false, -1},
+		{"cpu 50 0 0 50 0\ncpu0 50 0 0 50 0\n", false, 50},
+		{"", true, -1},
+		{"cpu 60 0 0 60 0\ncpu0 60 0 0 60 0\n", false, -1},
+		{"cpu 70 0 0 70 0\ncpu0 70 0 0 70 0\n", false, 50},
+		{"cpu 1 0 0 1 0\ncpu0 1 0 0 1 0\n", false, -1},
+	} {
+		fr.files[procStatPath] = sample.stat
+		delete(fr.errs, procStatPath)
+		if sample.fail {
+			fr.errs[procStatPath] = errors.New("unreadable")
+		}
+		metrics := m.collect()
+		if len(metrics.Cores) != 1 || metrics.Cores[0].Usage != sample.want {
+			t.Fatalf("sample %q: cores %v, want usage %v", sample.stat, metrics.Cores, sample.want)
+		}
 	}
 }
