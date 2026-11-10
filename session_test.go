@@ -23,14 +23,53 @@ func TestUpdateStatsFreqAndFan(t *testing.T) {
 			m.stats.FanSamples, m.stats.TotalFan, m.stats.PeakFan)
 	}
 
-	// Zero freq/fan values mean "no data this sample" and are skipped.
-	m.updateStats(10, nil, PowerReading{}, 0, 0)
+	// Zero frequency and negative fan speed mean "no data this sample".
+	m.updateStats(10, nil, PowerReading{}, 0, -1)
 	if m.stats.FreqSamples != 2 || m.stats.FanSamples != 2 {
 		t.Errorf("zero values must be skipped, got freq=%d fan=%d",
 			m.stats.FreqSamples, m.stats.FanSamples)
 	}
 	if m.stats.Samples != 3 {
 		t.Errorf("Samples = %d, want 3 (all samples count)", m.stats.Samples)
+	}
+}
+
+func TestCollectFanSummaryRejectsInvalidReadings(t *testing.T) {
+	for _, source := range []string{"thinkpad", "hwmon"} {
+		t.Run(source, func(t *testing.T) {
+			fr := mkMock(map[string]string{"hwmon0/name": "thinkpad"})
+			m := Monitor{
+				fr: fr, thinkpadFan: source == "thinkpad",
+				coreFreqBuf: make(map[int]string), curCoreBuf: make(map[int]CPUTimes),
+				coreDeltaBuf: make(map[int]cpuDelta), coreUsageBuf: make(map[int]float64),
+				fanLabels: make(map[string]string),
+			}
+			if source == "hwmon" {
+				m.fanFiles = []string{"hwmon0/fan1_input"}
+			}
+			for _, reading := range []string{"3000", "65535", "0", "junk", "-1", "6000"} {
+				fr.files[thinkpadFanPath] = "status: enabled\nspeed: " + reading + "\nlevel: auto\n"
+				fr.files["hwmon0/fan1_input"] = reading
+				metrics := m.collect()
+				if strings.Contains(metrics.FanStatus, "65535") {
+					t.Errorf("invalid reading displayed: %q", metrics.FanStatus)
+				}
+			}
+			delete(fr.files, thinkpadFanPath)
+			delete(fr.files, "hwmon0/fan1_input")
+			metrics := m.collect()
+			if metrics.FanStatus != "N/A" {
+				t.Errorf("failed reading status = %q, want N/A", metrics.FanStatus)
+			}
+			if m.stats.FanSamples != 3 || m.stats.TotalFan != 9000 || m.stats.PeakFan != 6000 {
+				t.Fatalf("fan stats = %d samples, %d total, %d peak; want 3, 9000, 6000",
+					m.stats.FanSamples, m.stats.TotalFan, m.stats.PeakFan)
+			}
+			out := captureStdout(t, func() { printSessionSummary(m.stats) })
+			if !strings.Contains(out, "avg 3000 RPM  peak 6000 RPM") {
+				t.Errorf("incorrect fan summary: %s", out)
+			}
+		})
 	}
 }
 

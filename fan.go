@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,6 +26,7 @@ func discoverFanFiles() []string {
 	return files
 }
 
+// readFanStatus returns a negative RPM when no valid reading is available; zero is a stopped fan.
 func readFanStatus(
 	fr FileReader,
 	fanFiles []string,
@@ -43,17 +46,20 @@ func readFanStatus(
 		}
 	}
 
-	return "", 0, ErrNoFanData
+	if thinkpadFan || len(fanFiles) > 0 {
+		return "N/A", -1, ErrNoFanData
+	}
+	return "", -1, ErrNoFanData
 }
 
 func readThinkPadFan(fr FileReader, lineBuf *[]string) (string, int64, error) {
 	data, err := fr.Read(thinkpadFanPath)
 	if err != nil {
-		return "", 0, err
+		return "", -1, err
 	}
 
 	lines := (*lineBuf)[:0]
-	var rpm int64
+	rpm := int64(-1)
 	scanner := bufio.NewScanner(strings.NewReader(data))
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -66,8 +72,11 @@ func readThinkPadFan(fr FileReader, lineBuf *[]string) (string, int64, error) {
 	}
 	*lineBuf = lines
 
-	if len(lines) == 0 {
-		return "", 0, ErrNoFanData
+	if err := scanner.Err(); err != nil {
+		return "", -1, err
+	}
+	if rpm < 0 {
+		return "", -1, ErrNoFanData
 	}
 	return "[ThinkPad]\n" + strings.Join(lines, "\n"), rpm, nil
 }
@@ -78,7 +87,10 @@ func fanSpeedRPM(line string) (int64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return parseInt64(strings.TrimSpace(rest))
+	rpm, valid := parseInt64(strings.TrimSpace(rest))
+	// Defensive ThinkPad quirk: an all-ones EC reading is not a usable tachometer sample.
+	// This is not a universal hwmon sentinel: https://docs.kernel.org/admin-guide/laptops/thinkpad-acpi.html
+	return rpm, valid && rpm >= 0 && rpm != 65535
 }
 
 func readHwmonFan(
@@ -88,11 +100,11 @@ func readHwmonFan(
 	lineBuf *[]string,
 ) (string, int64, error) {
 	lines := (*lineBuf)[:0]
-	var maxRPM int64
+	maxRPM := int64(-1)
 
 	for _, f := range fanFiles {
-		rpmVal, ok := readInt(fr, f)
-		if !ok || rpmVal <= 0 {
+		rpmVal := readHwmonFanRPM(fr, f)
+		if rpmVal < 0 {
 			continue
 		}
 		if rpmVal > maxRPM {
@@ -113,7 +125,26 @@ func readHwmonFan(
 	*lineBuf = lines
 
 	if len(lines) == 0 {
-		return "", 0, ErrNoFanData
+		return "", -1, ErrNoFanData
 	}
 	return "[hwmon]\n" + strings.Join(lines, "\n"), maxRPM, nil
+}
+
+func readHwmonFanRPM(fr FileReader, path string) int64 {
+	fault, err := fr.Read(strings.Replace(path, "_input", "_fault", 1))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return -1
+	}
+	if err == nil && fault != "0" {
+		return -1
+	}
+	rpm, ok := readInt(fr, path)
+	if !ok || rpm < 0 {
+		return -1
+	}
+	if rpm == 65535 && readOrNA(fr, filepath.Join(filepath.Dir(path), "name")) == "thinkpad" {
+		// Apply the same ThinkPad-only quirk as the procfs parser.
+		return -1
+	}
+	return rpm
 }

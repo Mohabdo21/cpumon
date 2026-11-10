@@ -195,7 +195,7 @@ func (m *Monitor) accumFreq(kHz int64) {
 }
 
 func (m *Monitor) accumFan(rpm int64) {
-	if rpm <= 0 {
+	if rpm < 0 {
 		return
 	}
 	if rpm > m.stats.PeakFan {
