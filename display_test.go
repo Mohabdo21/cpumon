@@ -145,8 +145,7 @@ func TestRenderMinimalMetrics(t *testing.T) {
 	}
 }
 
-func TestRenderPowerFallbackTotal(t *testing.T) {
-	// No Package zone => total stays 0, so the fallback loop sums all zones.
+func TestRenderPowerWithoutPackageZone(t *testing.T) {
 	m := Metrics{
 		Power: PowerReading{
 			Available: true,

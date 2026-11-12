@@ -121,12 +121,6 @@ func writePower(b *strings.Builder, m Metrics) {
 	}
 	writeHeader(b, "Power Consumption")
 	warn, crit := powerThresholds()
-	var total float64
-	for _, z := range m.Power.Zones {
-		if z.Name == "Package" {
-			total += z.Watts
-		}
-	}
 	for _, z := range m.Power.Zones {
 		color := ansiDefault
 		if z.Name == "Package" && z.Watts > crit {
@@ -136,11 +130,6 @@ func writePower(b *strings.Builder, m Metrics) {
 		}
 		fmt.Fprintf(b, "  %s%-14s%s %s%5.1f W%s\n",
 			ansiDim, z.Name+":", ansiReset, color, z.Watts, ansiReset)
-	}
-	if total == 0 {
-		for _, z := range m.Power.Zones {
-			total += z.Watts
-		}
 	}
 	b.WriteByte('\n')
 }
