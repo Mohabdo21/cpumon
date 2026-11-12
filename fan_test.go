@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -214,5 +216,29 @@ func TestFanLabelCached(t *testing.T) {
 	}
 	if fr.reads["hwmon0/fan1_input"] != 2 || fr.reads["hwmon0/fan1_label"] != 1 {
 		t.Fatalf("sample reads = %v", fr.reads)
+	}
+}
+
+func TestDiscoverFanFilesListsEachFanOnce(t *testing.T) {
+	root := t.TempDir()
+	device := filepath.Join(root, "devices/platform/fanchip/hwmon/hwmon0")
+	class := filepath.Join(root, "class/hwmon")
+	for _, dir := range []string{device, class} {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := filepath.Join(device, "fan1_input")
+	if err := os.WriteFile(input, []byte("1200\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(device, filepath.Join(class, "hwmon0")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := discoverFanFiles(root)
+	want := []string{filepath.Join(class, "hwmon0/fan1_input")}
+	if !slices.Equal(got, want) {
+		t.Fatalf("discoverFanFiles = %q, want %q", got, want)
 	}
 }

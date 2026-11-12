@@ -12,17 +12,9 @@ import (
 
 var fanFilterRe = regexp.MustCompile(`(level:|speed:|status:)`)
 
-func discoverFanFiles() []string {
-	patterns := []string{
-		"/sys/class/hwmon/hwmon*/fan*_input",
-		"/sys/devices/platform/*/hwmon/hwmon*/fan*_input",
-	}
-
-	var files []string
-	for _, p := range patterns {
-		matches, _ := filepath.Glob(p)
-		files = append(files, matches...)
-	}
+func discoverFanFiles(sysRoot string) []string {
+	// Device paths alias class/hwmon; scanning both duplicates fans.
+	files, _ := filepath.Glob(sysRoot + "/class/hwmon/hwmon*/fan*_input")
 	return files
 }
 
