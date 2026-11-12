@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +23,7 @@ func TestThermalLimitsCachedBetweenSamples(t *testing.T) {
 	files := map[string]string{"input": "50000", "crit": "100000", "max": "90000"}
 	fr := countingFileReader{mockFileReader: mkMock(files), reads: make(map[string]int)}
 	temps := []HwmonTemp{{Input: "input", LabelName: "Core 2", Crit: "crit", Max: "max"}}
+	prepareThermalOrder(temps, &CoreTopology{})
 	var buf []CoreStatus
 	if _, err := readThermalFromHwmon(fr, temps, nil, nil, &buf); err != nil {
 		t.Fatal(err)
@@ -50,10 +54,30 @@ func TestThermalLimitsCachedBetweenSamples(t *testing.T) {
 	}
 }
 
-func TestPreparedCoreGridMatchesOutput(t *testing.T) {
-	for _, hybrid := range []bool{false, true} {
+func TestCoreGridGroupsSurviveMissingSensors(t *testing.T) {
+	gridItem := regexp.MustCompile(`Package id 0|P-Cores|E-Cores|Core \d+`)
+	removal := []string{"", "c10", "pkg", "c4", "c2"}
+	for _, tt := range []struct {
+		hybrid bool
+		want   [][]string // Grid after removing removal[:i+1].
+	}{
+		{hybrid: false, want: [][]string{
+			{"Package id 0", "Core 10", "Core 4", "Core 2"},
+			{"Package id 0", "Core 4", "Core 2"},
+			{"Core 4", "Core 2"},
+			{"Core 2"},
+			nil,
+		}},
+		{hybrid: true, want: [][]string{
+			{"Package id 0", "P-Cores", "Core 2", "Core 10", "E-Cores", "Core 4"},
+			{"Package id 0", "P-Cores", "Core 2", "E-Cores", "Core 4"},
+			{"P-Cores", "Core 2", "E-Cores", "Core 4"},
+			{"P-Cores", "Core 2"},
+			nil,
+		}},
+	} {
 		topo := CoreTopology{
-			Hybrid: hybrid,
+			Hybrid: tt.hybrid,
 			Classes: map[int]CoreClass{
 				2:  CoreClassPerformance,
 				10: CoreClassPerformance,
@@ -67,31 +91,23 @@ func TestPreparedCoreGridMatchesOutput(t *testing.T) {
 			{Input: "c4", LabelName: "Core 4"},
 			{Input: "c2", LabelName: "Core 2"},
 		}
+		prepareThermalOrder(temps, &topo)
 		fr := mkMock(files)
 		var buf []CoreStatus
-		ordered := append([]HwmonTemp(nil), temps...)
-		preparedTopo := topo
-		prepareThermalOrder(ordered, &preparedTopo)
-		for _, missing := range []string{"none", "c10", "pkg", "c4", "c2"} {
+		for i, missing := range removal {
 			delete(files, missing)
+			var wantErr error
+			if tt.want[i] == nil {
+				wantErr = ErrNoThermalData
+			}
 			for _, width := range []int{40, 120, 200} {
-				original, originalErr := readThermalFromHwmon(fr, temps, nil, nil, &buf)
-				var want strings.Builder
-				writeCoreGrid(&want, original, SessionStats{}, width, topo)
-				prepared, preparedErr := readThermalFromHwmon(fr, ordered, nil, nil, &buf)
-				var got strings.Builder
-				writeCoreGrid(&got, prepared, SessionStats{}, width, preparedTopo)
-				if originalErr != preparedErr || got.String() != want.String() {
-					t.Fatalf(
-						"hybrid=%v missing=%s width=%d: output changed\ngot %q (%v)\nwant %q (%v)",
-						hybrid,
-						missing,
-						width,
-						got.String(),
-						preparedErr,
-						want.String(),
-						originalErr,
-					)
+				cores, err := readThermalFromHwmon(fr, temps, nil, nil, &buf)
+				var out strings.Builder
+				writeCoreGrid(&out, cores, SessionStats{}, width, topo)
+				got := gridItem.FindAllString(out.String(), -1)
+				if !errors.Is(err, wantErr) || !slices.Equal(got, tt.want[i]) {
+					t.Fatalf("hybrid=%v missing=%q width=%d: grid = %q (%v), want %q (%v)",
+						tt.hybrid, removal[:i+1], width, got, err, tt.want[i], wantErr)
 				}
 			}
 		}

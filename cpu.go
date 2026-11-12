@@ -187,10 +187,6 @@ func readThermalFromHwmon(
 
 		label := t.LabelName
 		temp := fmt.Sprintf("+%.1f°C", tempC)
-		if !t.metadataReady {
-			t.coreID = extractCoreID(label)
-			t.metadataReady = true
-		}
 		if !now.Before(t.limitsRefreshAt) {
 			refreshThermalLimits(fr, t)
 			t.limitsRefreshAt = now.Add(30 * time.Second)

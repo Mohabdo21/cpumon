@@ -253,28 +253,7 @@ func writeCoreGrid(
 		}
 	}
 
-	if topo.ordered {
-		writeOrderedCoreGroups(b, cores, width, topo)
-		return
-	}
-	if topo.Hybrid {
-		perf, eff := classifyCores(cores, topo)
-		writeCoreGroup(b, "P-Cores", perf, width)
-		writeCoreGroup(b, "E-Cores", eff, width)
-		return
-	}
-
-	var perCore []CoreStatus
-	for i := range cores {
-		if !cores[i].IsPackage {
-			perCore = append(perCore, cores[i])
-		}
-	}
-	if len(perCore) == 0 {
-		return
-	}
-
-	writeCoreRows(b, perCore, width)
+	writeOrderedCoreGroups(b, cores, width, topo)
 }
 
 func writeOrderedCoreGroups(b *strings.Builder, cores []CoreStatus, width int, topo CoreTopology) {

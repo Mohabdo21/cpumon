@@ -98,7 +98,6 @@ type HwmonTemp struct {
 	Crit            string
 	Max             string
 	coreID          int
-	metadataReady   bool
 	limit           string
 	coreLimit       string
 	limitsRefreshAt time.Time

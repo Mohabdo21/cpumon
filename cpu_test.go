@@ -291,6 +291,7 @@ func TestReadThermalFromHwmon(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := mockFileReader{files: tt.files, errs: tt.errs}
 			buf := make([]CoreStatus, 0, 4)
+			prepareThermalOrder(tt.temps, &CoreTopology{})
 			cores, err := readThermalFromHwmon(fs, tt.temps, tt.coreFreqs, tt.coreUsage, &buf)
 			if tt.wantErr {
 				if err == nil {

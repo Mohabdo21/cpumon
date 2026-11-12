@@ -19,16 +19,13 @@ type CoreTopology struct {
 	Classes map[int]CoreClass
 	Hybrid  bool
 	Vendor  string
-	ordered bool
 	label   string
 }
 
-// prepareThermalOrder makes package and core groups contiguous before sampling.
-// Missing sensor readings can then be skipped without changing group order.
+// prepareThermalOrder caches core IDs and groups sensors before sampling or rendering.
 func prepareThermalOrder(temps []HwmonTemp, topo *CoreTopology) {
 	for i := range temps {
 		temps[i].coreID = extractCoreID(temps[i].LabelName)
-		temps[i].metadataReady = true
 	}
 	sort.SliceStable(temps, func(i, j int) bool {
 		a, b := temps[i].coreID, temps[j].coreID
@@ -45,7 +42,6 @@ func prepareThermalOrder(temps []HwmonTemp, topo *CoreTopology) {
 		return a < b
 	})
 	topo.label = coreClassLabel(*topo)
-	topo.ordered = true
 }
 
 func discoverCoreClasses(fr FileReader, coreMap map[int]int) CoreTopology {
@@ -145,25 +141,6 @@ func detectAMDPreferred(fr FileReader, coreMap map[int]int, topo *CoreTopology) 
 	return classifyByThreshold(rankings, 10, topo, "AMD")
 }
 
-func classifyCores(cores []CoreStatus, topo CoreTopology) (perf, eff []CoreStatus) {
-	for i := range cores {
-		if cores[i].IsPackage {
-			continue
-		}
-
-		id := extractCoreID(cores[i].Label)
-		switch topo.Classes[id] {
-		case CoreClassEfficiency:
-			eff = append(eff, cores[i])
-		default:
-			perf = append(perf, cores[i])
-		}
-	}
-	sortCoresByID(perf)
-	sortCoresByID(eff)
-	return
-}
-
 func extractCoreID(label string) int {
 	m := coreNumRe.FindStringSubmatch(label)
 	if m == nil {
@@ -171,12 +148,6 @@ func extractCoreID(label string) int {
 	}
 	id, _ := strconv.Atoi(m[1])
 	return id
-}
-
-func sortCoresByID(cores []CoreStatus) {
-	sort.Slice(cores, func(i, j int) bool {
-		return extractCoreID(cores[i].Label) < extractCoreID(cores[j].Label)
-	})
 }
 
 func coreClassLabel(topo CoreTopology) string {
