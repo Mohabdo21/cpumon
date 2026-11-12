@@ -246,8 +246,7 @@ func (m *Monitor) Run(ctx context.Context, interval time.Duration) error {
 	}
 }
 
-// watchQuit cancels ctx on SIGINT/SIGTERM or a quit key (q/Q/Ctrl+C) on
-// stdin. Returns a func that stops the watchers.
+// watchQuit cancels ctx on SIGINT/SIGTERM or q/Q/Ctrl+C and returns signal cleanup.
 func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
@@ -263,10 +262,12 @@ func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
 		case <-ctx.Done():
 		}
 	})
-	wg.Go(func() {
+	// Don't join the key reader: closing stdin can't interrupt a blocked TTY read.
+	stdin := os.Stdin
+	go func() {
 		var buf [1]byte
 		for {
-			n, err := os.Stdin.Read(buf[:])
+			n, err := stdin.Read(buf[:])
 			if n == 1 && (buf[0] == 'q' || buf[0] == 'Q' || buf[0] == 0x03) {
 				keyCh <- buf[0]
 				return
@@ -275,11 +276,10 @@ func watchQuit(ctx context.Context, cancel context.CancelFunc) func() {
 				return
 			}
 		}
-	})
+	}()
 
 	return func() {
 		signal.Stop(sigCh)
-		_ = os.Stdin.Close()
 		wg.Wait()
 	}
 }
